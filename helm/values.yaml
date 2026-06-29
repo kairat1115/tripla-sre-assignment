@@ -1,0 +1,19 @@
+replicaCount: 1
+
+frontend:
+  image:
+    repository: nginx
+    tag: latest
+  service:
+    type: LoadBalancer
+    port: 80
+
+backend:
+  image:
+    repository: hashicorp/http-echo
+    tag: latest
+  service:
+    type: ClusterIP
+    port: 8080
+
+resources: {}
