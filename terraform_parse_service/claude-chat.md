@@ -32,3 +32,45 @@ add a detailed todo list to the plan, with all the phases and individual tasks n
 ---
 
 implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.
+
+# Request to create readme
+
+Create README.md
+
+---
+
+and some manual polishing
+
+# Request to create plan2.md
+this log message is useless. can we make it more meaningful
+
+request:
+curl -v localhost:8080/api/aws/v1/s3/buckets -d '{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"tripla-bucket"}}'
+log:
+{"level":"info","ts":1782802822.3116622,"caller":"s3/bucket.go:83","msg":"unexpected EOF","service":"terraform-parse-service","method":"POST","path":"/api/aws/v1/s3/buckets","remote_addr":"[::1]:57498","status":400,"duration_ms":0}
+
+rename request handled to something more meaningful, associated with what outcome has been achieved
+request:
+curl -v localhost:8080/api/aws/v1/s3/buckets -d '{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"tripla-bucket"}}}'
+log:
+{"level":"info","ts":1782802750.3982568,"caller":"s3/bucket.go:120","msg":"request handled","service":"terraform-parse-service","method":"POST","path":"/api/aws/v1/s3/buckets","remote_addr":"[::1]:57467","status":201,"aws-region":"eu-west-1","acl":"private","bucket-name":"tripla-bucket","output_path":"output/aws/s3/tripla-bucket/main.tf","duration_ms":1}
+
+this log shows error but its unknown what request is, thus not debugable
+request:
+curl -v localhost:8080/api/aws/v1/s3/buckets -d '{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":tripla-bucket}}}'
+log:
+{"level":"info","ts":1782802968.831769,"caller":"s3/bucket.go:83","msg":"invalid character 'i' in literal true (expecting 'u')","service":"terraform-parse-service","method":"POST","path":"/api/aws/v1/s3/buckets","remote_addr":"[::1]:57511","status":400,"duration_ms":0}
+
+revamp logs to make them meaningful for the engineer to debug. write a detailed plan2.md document outlining how to implement this. include code snippets
+
+---
+
+some remarks in the plan and ask clause with the following - I added a few notes to the document, address all the notes and update the document accordingly. don’t implement yet
+
+---
+
+add a detailed todo list to the plan, with all the phases and individual tasks necessary to complete the plan - don’t implement yet
+
+---
+
+implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.

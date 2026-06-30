@@ -3,6 +3,7 @@ package s3
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -78,10 +79,22 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		zap.String("remote_addr", r.RemoteAddr),
 	}
 
-	var req bucketRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Info(err.Error(), append(base,
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Info("request body read failed", append(base,
 			zap.Int("status", http.StatusBadRequest),
+			zap.String("error", err.Error()),
+			zap.Int64("duration_ms", time.Since(start).Milliseconds()),
+		)...)
+		handler.Respond(w, handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
+		return
+	}
+
+	var req bucketRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		h.logger.Info("request body decode failed", append(base,
+			zap.Int("status", http.StatusBadRequest),
+			zap.String("error", err.Error()),
 			zap.Int64("duration_ms", time.Since(start).Milliseconds()),
 		)...)
 		handler.Respond(w, handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
@@ -117,7 +130,7 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("request handled", append(base,
+	h.logger.Info("terraform config generated", append(base,
 		zap.Int("status", http.StatusCreated),
 		zap.String("aws-region", p.Region),
 		zap.String("acl", p.ACL),
