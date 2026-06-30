@@ -1,0 +1,10 @@
+listen_addr: ":8080"
+logger:
+  level: "info"
+  metadata:
+    service: "terraform-parse-service"
+    env: "${APP_ENV}"
+providers:
+  aws:
+    templates_dir: "./templates/aws"
+    storage_dir: "./output/aws"

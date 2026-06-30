@@ -1,0 +1,84 @@
+package s3
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"go.uber.org/zap"
+
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/service"
+)
+
+type stubTerraform struct {
+	path string
+	err  error
+}
+
+func (s *stubTerraform) Generate(_ service.Generator) (string, error) {
+	return s.path, s.err
+}
+
+func TestBucketHandler_BadJSON(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{}, zap.NewNop())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString("{bad"))
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", rec.Code)
+	}
+	var body map[string]string
+	_ = json.NewDecoder(rec.Body).Decode(&body)
+	if body["error"] != "invalid JSON" {
+		t.Fatalf("unexpected error: %s", body["error"])
+	}
+}
+
+func TestBucketHandler_MissingProperty(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{}, zap.NewNop())
+	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d", rec.Code)
+	}
+}
+
+func TestBucketHandler_GenerationError(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("render failed")}, zap.NewNop())
+	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"b"}}}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", rec.Code)
+	}
+}
+
+func TestBucketHandler_Success(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{path: "/out/s3/b/main.tf"}, zap.NewNop())
+	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"b"}}}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d", rec.Code)
+	}
+	var resp bucketResponse
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if resp.OutputPath != "/out/s3/b/main.tf" {
+		t.Fatalf("unexpected output_path: %s", resp.OutputPath)
+	}
+}
