@@ -10,7 +10,7 @@ HTTP service that renders Terraform HCL configurations from a JSON payload and w
 
 ```bash
 go build -o server ./cmd/server
-./server
+CONFIG_PATH=configs/config.yaml ./server
 ```
 
 The server listens on `:8080` by default. Override with `listen_addr` in the config file (see [Configuration](#configuration)).
