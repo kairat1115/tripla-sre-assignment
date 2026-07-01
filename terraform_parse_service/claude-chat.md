@@ -142,3 +142,37 @@ ok, i see traces but not logs
 # enrich trace with payload
 
 i want to see request payload in the trace
+
+# update images
+
+use grafana/alloy:v1.17.1
+use grafana/tempo:3.0.2
+use grafana/loki:3.7.3
+use grafana/grafana:13.0.3-distroless-slim
+use prom/prometheus:v3.12.0-distroless
+
+adjust configuration to these releases
+
+---
+
+tempo and prometheus dies
+tempo-1       | failed parsing config: failed to parse configFile /etc/tempo.yaml: yaml: unmarshal errors:
+tempo-1       |   line 11: field ingester not found in type app.Config
+tempo-1       |   line 22: field compactor not found in type app.Config
+prometheus-1  | time=2026-07-01T03:42:34.673Z level=ERROR source=query_logger.go:113 msg="Error opening query log file" component=activeQueryTracker file=/prometheus/data/queries.active err="open data/queries.active: permission denied"
+prometheus-1  | panic: Unable to create mmap-ed active query log
+prometheus-1  | 
+prometheus-1  | goroutine 1 [running]:
+prometheus-1  | github.com/prometheus/prometheus/promql.NewActiveQueryTracker({0x561c038, 0x5}, 0x14, 0x55ca5ec0cea0)
+prometheus-1  | 	/app/promql/query_logger.go:145 +0x234
+prometheus-1  | main.main()
+prometheus-1  | 	/app/cmd/prometheus/main.go:971 +0x76b4
+tempo-1 exited with code 1
+prometheus-1 exited with code 2
+
+grafana dies
+grafana-1     | logger=provisioning t=2026-07-01T03:42:36.436199067Z level=error msg="Failed to provision data sources" error="Datasource provisioning error: data source not found"
+grafana-1     | logger=provisioning t=2026-07-01T03:42:36.436287264Z level=error msg="Failed to provision data sources" error="Datasource provisioning error: data source not found"
+grafana-1     | Error: ✗ invalid service state: Failed, expected: Terminated, failure: invalid service state: Failed, expected: Running, failure: not healthy, 0 terminated, 1 failed: [starting module provisioning: invalid service state: Failed, expected: Running, failure: Datasource provisioning error: data source not found]
+grafana-1 exited with code 1
+

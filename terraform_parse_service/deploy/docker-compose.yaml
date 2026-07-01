@@ -21,7 +21,7 @@ services:
       - obs
 
   alloy:
-    image: grafana/alloy:v1.9.2
+    image: grafana/alloy:v1.17.1
     command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
@@ -32,11 +32,12 @@ services:
       - tempo
       - loki
       - prometheus
+      - prometheus-init
     networks:
       - obs
 
   tempo:
-    image: grafana/tempo:2.7.2
+    image: grafana/tempo:3.0.2
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo/config.yaml:/etc/tempo.yaml:ro
@@ -45,7 +46,7 @@ services:
       - obs
 
   loki:
-    image: grafana/loki:3.5.0
+    image: grafana/loki:3.7.3
     command: ["-config.file=/etc/loki/config.yaml"]
     volumes:
       - ./loki/config.yaml:/etc/loki/config.yaml:ro
@@ -53,19 +54,30 @@ services:
     networks:
       - obs
 
+  prometheus-init:
+    image: busybox
+    command: ["chown", "-R", "65534:65534", "/prometheus"]
+    volumes:
+      - prometheus-data:/prometheus
+    networks:
+      - obs
+
   prometheus:
-    image: prom/prometheus:v3.4.1
+    image: prom/prometheus:v3.12.0-distroless
     command:
       - --config.file=/etc/prometheus/prometheus.yaml
       - --web.enable-remote-write-receiver
     volumes:
       - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
       - prometheus-data:/prometheus
+    depends_on:
+      prometheus-init:
+        condition: service_completed_successfully
     networks:
       - obs
 
   grafana:
-    image: grafana/grafana:12.0.1
+    image: grafana/grafana:13.0.3-distroless-slim
     ports:
       - "3000:3000"
     environment:

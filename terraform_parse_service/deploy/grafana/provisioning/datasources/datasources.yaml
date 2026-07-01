@@ -5,6 +5,7 @@ datasources:
     type: tempo
     access: proxy
     url: http://tempo:3200
+    uid: tempo
     isDefault: false
     jsonData:
       tracesToLogsV2:
@@ -12,11 +13,14 @@ datasources:
         filterByTraceID: true
       serviceMap:
         datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
 
   - name: Loki
     type: loki
     access: proxy
     url: http://loki:3100
+    uid: loki
     isDefault: false
     jsonData:
       derivedFields:
@@ -29,4 +33,5 @@ datasources:
     type: prometheus
     access: proxy
     url: http://prometheus:9090
+    uid: prometheus
     isDefault: true
