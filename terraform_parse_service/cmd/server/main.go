@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"text/template"
@@ -13,6 +14,7 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/logger"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/service"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/storage"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/tracing"
 )
 
 func main() {
@@ -32,6 +34,13 @@ func main() {
 	}
 	defer l.Sync()
 	zap.ReplaceGlobals(l)
+
+	_, shutdown, err := tracing.New(context.Background(), cfg.Logger.Metadata["service"], cfg.Tracing)
+	if err != nil {
+		zap.L().Error("tracer init failed", zap.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer func() { _ = shutdown(context.Background()) }()
 
 	writers := make(map[string]storage.Writer)
 	templates := make(map[string]*template.Template)

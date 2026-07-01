@@ -1,10 +1,18 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+const tracerName = "storage.filesystem"
 
 type FSWriter struct {
 	BaseDir string
@@ -17,14 +25,30 @@ func NewFSWriter(baseDir string) (*FSWriter, error) {
 	return &FSWriter{BaseDir: baseDir}, nil
 }
 
-func (w *FSWriter) Write(name string, content []byte) (string, error) {
+func (w *FSWriter) Write(ctx context.Context, name string, content []byte) (string, error) {
+	_, span := otel.Tracer(tracerName).Start(ctx, "storage.write",
+		trace.WithAttributes(
+			attribute.String("storage.name", name),
+			attribute.String("storage.base_dir", w.BaseDir),
+		),
+	)
+	defer span.End()
+
 	dir := filepath.Join(w.BaseDir, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("mkdir %s: %w", dir, err)
+		err = fmt.Errorf("mkdir %s: %w", dir, err)
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		return "", err
 	}
 	path := filepath.Join(dir, "main.tf")
 	if err := os.WriteFile(path, content, 0o644); err != nil {
-		return "", fmt.Errorf("write %s: %w", path, err)
+		err = fmt.Errorf("write %s: %w", path, err)
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		return "", err
 	}
+	span.SetStatus(codes.Ok, "")
+	span.SetAttributes(attribute.String("output.path", path))
 	return path, nil
 }

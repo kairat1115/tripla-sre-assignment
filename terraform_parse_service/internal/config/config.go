@@ -17,9 +17,16 @@ type LoggerConfig struct {
 	Metadata map[string]string `yaml:"metadata"`
 }
 
+type TracingConfig struct {
+	Exporter    string  `yaml:"exporter"`
+	Endpoint    string  `yaml:"endpoint"`
+	SampleRatio float64 `yaml:"sample_ratio"`
+}
+
 type Config struct {
 	ListenAddr string                    `yaml:"listen_addr"`
 	Logger     LoggerConfig              `yaml:"logger"`
+	Tracing    TracingConfig             `yaml:"tracing"`
 	Providers  map[string]ProviderConfig `yaml:"providers"`
 }
 

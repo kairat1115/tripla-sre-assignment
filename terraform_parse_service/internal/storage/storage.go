@@ -1,5 +1,7 @@
 package storage
 
+import "context"
+
 type Writer interface {
-	Write(name string, content []byte) (string, error)
+	Write(ctx context.Context, name string, content []byte) (string, error)
 }
