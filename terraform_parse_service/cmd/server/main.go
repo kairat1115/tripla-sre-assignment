@@ -6,12 +6,14 @@ import (
 	"os"
 	"text/template"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/handler"
 	s3handler "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/handler/aws/s3"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/logger"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/service"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/storage"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/tracing"
@@ -42,6 +44,10 @@ func main() {
 	}
 	defer func() { _ = shutdown(context.Background()) }()
 
+	reg := prometheus.NewRegistry()
+	m := metrics.New(reg)
+	m.Serve(cfg.Metrics.Addr, zap.L())
+
 	writers := make(map[string]storage.Writer)
 	templates := make(map[string]*template.Template)
 	for provider, pcfg := range cfg.Providers {
@@ -59,10 +65,10 @@ func main() {
 		templates[provider] = tmpl
 	}
 
-	tfSvc := service.NewTerraformService(writers, templates)
+	tfSvc := service.NewTerraformService(writers, templates, m)
 
 	mux := http.NewServeMux()
-	mux.Handle("POST /api/aws/v1/s3/buckets", s3handler.NewBucketHandler(tfSvc, l))
+	mux.Handle("POST /api/aws/v1/s3/buckets", s3handler.NewBucketHandler(tfSvc, l, m))
 
 	providerNames := make([]string, 0, len(cfg.Providers))
 	for p := range cfg.Providers {

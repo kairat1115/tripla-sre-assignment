@@ -1,0 +1,88 @@
+{
+  "title": "Terraform Parse Service",
+  "uid": "terraform-parse-service",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Generation Rate (success/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (provider, resource) (rate(terraform_generation_total{status=\"success\"}[5m]))",
+          "legendFormat": "{{provider}} / {{resource}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Generation Error Rate (errors/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (provider, resource) (rate(terraform_generation_total{status=\"error\"}[5m]))",
+          "legendFormat": "{{provider}} / {{resource}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Generation p99 Latency (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, sum by (le, provider, resource) (rate(terraform_generation_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99 {{provider}} / {{resource}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "HTTP Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (path, status_code) (rate(http_requests_total[5m]))",
+          "legendFormat": "{{path}} {{status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "HTTP p99 Latency (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, sum by (le, path) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99 {{path}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "In-Flight Requests",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (method, path) (http_requests_in_flight)",
+          "legendFormat": "{{method}} {{path}}"
+        }
+      ]
+    }
+  ]
+}

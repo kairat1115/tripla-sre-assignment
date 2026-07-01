@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -15,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/handler"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/service"
 )
 
@@ -73,27 +75,42 @@ func (g *bucketGenerator) TemplateData() any {
 type BucketHandler struct {
 	svc    handler.Terraform
 	logger *zap.Logger
+	m      *metrics.Metrics
 }
 
-func NewBucketHandler(svc handler.Terraform, logger *zap.Logger) *BucketHandler {
-	return &BucketHandler{svc: svc, logger: logger}
+func NewBucketHandler(svc handler.Terraform, logger *zap.Logger, m *metrics.Metrics) *BucketHandler {
+	return &BucketHandler{svc: svc, logger: logger, m: m}
 }
 
 func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	method := r.Method
+	path := r.URL.Path
+
+	h.m.HTTPInFlight.WithLabelValues(method, path).Inc()
+	defer func() {
+		h.m.HTTPInFlight.WithLabelValues(method, path).Dec()
+		h.m.HTTPDuration.WithLabelValues(method, path).Observe(time.Since(start).Seconds())
+	}()
+
+	respond := func(result handler.Result) {
+		h.m.HTTPRequestsTotal.WithLabelValues(method, path, strconv.Itoa(result.Code)).Inc()
+		handler.Respond(w, result)
+	}
+
 	ctx, span := otel.Tracer(tracerName).Start(r.Context(), "http.request",
 		trace.WithSpanKind(trace.SpanKindServer),
 		trace.WithAttributes(
-			attribute.String("http.request.method", r.Method),
-			attribute.String("url.path", r.URL.Path),
+			attribute.String("http.request.method", method),
+			attribute.String("url.path", path),
 			attribute.String("network.peer.address", r.RemoteAddr),
 		),
 	)
 	defer span.End()
 
 	base := []zap.Field{
-		zap.String("http.request.method", r.Method),
-		zap.String("url.path", r.URL.Path),
+		zap.String("http.request.method", method),
+		zap.String("url.path", path),
 		zap.String("network.peer.address", r.RemoteAddr),
 		zap.String("trace_id", span.SpanContext().TraceID().String()),
 	}
@@ -108,7 +125,7 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			zap.String("exception.message", err.Error()),
 			zap.Float64("http.server.request.duration", time.Since(start).Seconds()),
 		)...)
-		handler.Respond(w, handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
+		respond(handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
 		return
 	}
 	span.SetAttributes(attribute.String("http.request.body", string(body)))
@@ -123,7 +140,7 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			zap.String("exception.message", err.Error()),
 			zap.Float64("http.server.request.duration", time.Since(start).Seconds()),
 		)...)
-		handler.Respond(w, handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
+		respond(handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
 		return
 	}
 
@@ -144,7 +161,7 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			zap.String("service.aws.s3.bucket_name", p.BucketName),
 			zap.Float64("http.server.request.duration", time.Since(start).Seconds()),
 		)...)
-		handler.Respond(w, handler.Result{Code: http.StatusUnprocessableEntity, Msg: msg, Err: err})
+		respond(handler.Result{Code: http.StatusUnprocessableEntity, Msg: msg, Err: err})
 		return
 	}
 
@@ -167,7 +184,7 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			zap.String("exception.message", err.Error()),
 			zap.Float64("http.server.request.duration", time.Since(start).Seconds()),
 		)...)
-		handler.Respond(w, handler.Result{Code: http.StatusInternalServerError, Msg: "generation failed", Err: err})
+		respond(handler.Result{Code: http.StatusInternalServerError, Msg: "generation failed", Err: err})
 		return
 	}
 
@@ -187,7 +204,7 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		zap.String("output.path", outputPath),
 		zap.Float64("http.server.request.duration", time.Since(start).Seconds()),
 	)...)
-	handler.Respond(w, handler.Result{Code: http.StatusCreated, Data: bucketResponse{OutputPath: outputPath}})
+	respond(handler.Result{Code: http.StatusCreated, Data: bucketResponse{OutputPath: outputPath}})
 }
 
 var _ service.Generator = (*bucketGenerator)(nil)

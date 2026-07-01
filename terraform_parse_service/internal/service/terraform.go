@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/Masterminds/sprig/v3"
 	"go.opentelemetry.io/otel"
@@ -15,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/storage"
 )
 
@@ -31,10 +33,11 @@ type Generator interface {
 type TerraformService struct {
 	writers   map[string]storage.Writer
 	templates map[string]*template.Template
+	m         *metrics.Metrics
 }
 
-func NewTerraformService(writers map[string]storage.Writer, templates map[string]*template.Template) *TerraformService {
-	return &TerraformService{writers: writers, templates: templates}
+func NewTerraformService(writers map[string]storage.Writer, templates map[string]*template.Template, m *metrics.Metrics) *TerraformService {
+	return &TerraformService{writers: writers, templates: templates, m: m}
 }
 
 func LoadTemplates(dir string) (*template.Template, error) {
@@ -61,6 +64,9 @@ func LoadTemplates(dir string) (*template.Template, error) {
 }
 
 func (s *TerraformService) Generate(g Generator) (string, error) {
+	start := time.Now()
+	resource := resourceLabel(g.TemplateName())
+
 	ctx, span := otel.Tracer(tracerName).Start(g.Context(), "service.generate",
 		trace.WithAttributes(
 			attribute.String("template.name", g.TemplateName()),
@@ -70,33 +76,46 @@ func (s *TerraformService) Generate(g Generator) (string, error) {
 	)
 	defer span.End()
 
+	recordErr := func(err error) (string, error) {
+		s.m.GenerationTotal.WithLabelValues(g.Provider(), resource, "error").Inc()
+		s.m.GenerationDuration.WithLabelValues(g.Provider(), resource).Observe(time.Since(start).Seconds())
+		return "", err
+	}
+
 	tmpl, ok := s.templates[g.Provider()]
 	if !ok {
 		err := fmt.Errorf("no templates registered for provider %s", g.Provider())
 		span.SetStatus(codes.Error, err.Error())
-		return "", err
+		return recordErr(err)
 	}
 	writer, ok := s.writers[g.Provider()]
 	if !ok {
 		err := fmt.Errorf("no writer registered for provider %s", g.Provider())
 		span.SetStatus(codes.Error, err.Error())
-		return "", err
+		return recordErr(err)
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, g.TemplateName(), g.TemplateData()); err != nil {
 		err = fmt.Errorf("render template %s: %w", g.TemplateName(), err)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
-		return "", err
+		return recordErr(err)
 	}
 	path, err := writer.Write(ctx, g.StoragePath(), buf.Bytes())
 	if err != nil {
 		err = fmt.Errorf("write storage: %w", err)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
-		return "", err
+		return recordErr(err)
 	}
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.String("output.path", path))
+	s.m.GenerationTotal.WithLabelValues(g.Provider(), resource, "success").Inc()
+	s.m.GenerationDuration.WithLabelValues(g.Provider(), resource).Observe(time.Since(start).Seconds())
 	return path, nil
+}
+
+func resourceLabel(templateName string) string {
+	name := strings.TrimSuffix(templateName, ".tf.tmpl")
+	return strings.ReplaceAll(name, "/", "_")
 }

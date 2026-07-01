@@ -8,6 +8,8 @@ tracing:
   endpoint: "alloy:4317"
   insecure: true
   sample_ratio: 1.0
+metrics:
+  addr: ":9091"
 providers:
   aws:
     templates_dir: "/templates/aws"

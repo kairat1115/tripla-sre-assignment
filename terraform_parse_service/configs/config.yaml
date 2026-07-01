@@ -7,6 +7,8 @@ tracing:
   exporter: "stdout"
   endpoint: "localhost:4317"
   sample_ratio: 1.0
+metrics:
+  addr: ":9091"
 providers:
   aws:
     templates_dir: "./templates/aws"

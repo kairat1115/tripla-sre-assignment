@@ -35,6 +35,14 @@ prometheus.remote_write "default" {
   }
 }
 
+prometheus.scrape "server" {
+  targets = [{
+    __address__ = "server:9091",
+  }]
+  forward_to      = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+}
+
 discovery.docker "server" {
   host = "unix:///var/run/docker.sock"
 

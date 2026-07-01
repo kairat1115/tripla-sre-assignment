@@ -24,10 +24,15 @@ type TracingConfig struct {
 	SampleRatio float64 `yaml:"sample_ratio"`
 }
 
+type MetricsConfig struct {
+	Addr string `yaml:"addr"`
+}
+
 type Config struct {
 	ListenAddr string                    `yaml:"listen_addr"`
 	Logger     LoggerConfig              `yaml:"logger"`
 	Tracing    TracingConfig             `yaml:"tracing"`
+	Metrics    MetricsConfig             `yaml:"metrics"`
 	Providers  map[string]ProviderConfig `yaml:"providers"`
 }
 
