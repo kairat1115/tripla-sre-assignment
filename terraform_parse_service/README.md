@@ -13,6 +13,17 @@ go build -o server ./cmd/server
 CONFIG_PATH=configs/config.yaml ./server
 ```
 
+### Docker
+
+```bash
+docker build -t terraform-parse-service .
+docker run --rm \
+  -p 8080:8080 \
+  --read-only \
+  -v $(pwd)/output:/output \
+  terraform-parse-service
+```
+
 The server listens on `:8080` by default. Override with `listen_addr` in the config file (see [Configuration](#configuration)).
 
 ## Configuration

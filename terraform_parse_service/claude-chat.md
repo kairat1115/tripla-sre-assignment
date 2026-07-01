@@ -104,3 +104,11 @@ implement it all. when you’re done with a task or phase, mark it as completed 
 # inject trace id to logs
 
 inject traceid to logs
+
+# create dockerfile
+
+create me a Dockerfile that will run server from scratch
+
+---
+
+add how to build and run it to readme
