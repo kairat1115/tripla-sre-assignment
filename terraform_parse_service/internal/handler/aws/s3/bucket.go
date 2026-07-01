@@ -95,6 +95,7 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		zap.String("http.request.method", r.Method),
 		zap.String("url.path", r.URL.Path),
 		zap.String("network.peer.address", r.RemoteAddr),
+		zap.String("trace_id", span.SpanContext().TraceID().String()),
 	}
 
 	body, err := io.ReadAll(r.Body)
