@@ -32,7 +32,6 @@ services:
       - tempo
       - loki
       - prometheus
-      - prometheus-init
     networks:
       - obs
 
@@ -54,25 +53,16 @@ services:
     networks:
       - obs
 
-  prometheus-init:
-    image: busybox
-    command: ["chown", "-R", "65534:65534", "/prometheus"]
-    volumes:
-      - prometheus-data:/prometheus
-    networks:
-      - obs
-
   prometheus:
     image: prom/prometheus:v3.12.0-distroless
+    user: "0"
     command:
       - --config.file=/etc/prometheus/prometheus.yaml
       - --web.enable-remote-write-receiver
+      - --storage.tsdb.path=/prometheus/data
     volumes:
       - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
       - prometheus-data:/prometheus
-    depends_on:
-      prometheus-init:
-        condition: service_completed_successfully
     networks:
       - obs
 
