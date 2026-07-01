@@ -111,6 +111,7 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		handler.Respond(w, handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
 		return
 	}
+	span.SetAttributes(attribute.String("http.request.body", string(body)))
 
 	var req bucketRequest
 	if err := json.Unmarshal(body, &req); err != nil {

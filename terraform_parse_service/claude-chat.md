@@ -138,3 +138,7 @@ server-1      | {"level":"error","ts":1782875510.3324254,"caller":"server/main.g
 ---
 
 ok, i see traces but not logs
+
+# enrich trace with payload
+
+i want to see request payload in the trace
