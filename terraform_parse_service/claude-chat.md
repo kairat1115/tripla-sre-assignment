@@ -89,6 +89,7 @@ add a detailed todo list to the plan, with all the phases and individual tasks n
 ---
 
 implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.
+
 ---
 
 lots of remarks and edits to plan, and ask clause with the following - I added a few notes to the document, address all the notes and update the document accordingly. don’t implement yet
@@ -112,3 +113,28 @@ create me a Dockerfile that will run server from scratch
 ---
 
 add how to build and run it to readme
+
+# Request to create plan4.md
+
+create docker-compose where you run server, grafana alloy, grafana, prometheus for metrics, tempo for traces, loki for logs. write a detailed plan4.md document outlining how to implement this. include code snippets
+
+---
+
+add a detailed todo list to the plan, with all the phases and individual tasks necessary to complete the plan - don’t implement yet
+
+---
+
+implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.
+
+---
+
+i see no traces nor logs and get following message
+server-1      | 2026/07/01 03:06:47 traces export: exporter export timeout: rpc error: code = Unavailable desc = dns: A record lookup error: lookup alloy on 127.0.0.11:53: server misbehaving
+
+---
+
+server-1      | {"level":"error","ts":1782875510.3324254,"caller":"server/main.go:26","msg":"config load failed","error":"populate config: yaml: unmarshal errors:\n  line 13: field insecure not found in type config.TracingConfig","stacktrace":"main.main\n\tgithub.com/kairat1115/tripla-sre-assignment/terraform_parse_service/cmd/server/main.go:26\nruntime.main\n\truntime/proc.go:285"}
+
+---
+
+ok, i see traces but not logs

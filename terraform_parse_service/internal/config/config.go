@@ -20,6 +20,7 @@ type LoggerConfig struct {
 type TracingConfig struct {
 	Exporter    string  `yaml:"exporter"`
 	Endpoint    string  `yaml:"endpoint"`
+	Insecure    bool    `yaml:"insecure"`
 	SampleRatio float64 `yaml:"sample_ratio"`
 }
 

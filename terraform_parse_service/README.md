@@ -24,6 +24,22 @@ docker run --rm \
   terraform-parse-service
 ```
 
+### Observability stack
+
+Runs the server together with Grafana Alloy, Tempo, Loki, Prometheus, and Grafana:
+
+```bash
+cd deploy
+docker compose up --build
+```
+
+| Endpoint | Service |
+|---|---|
+| `http://localhost:8080` | Server |
+| `http://localhost:3000` | Grafana (anonymous admin) |
+
+Traces, logs, and metrics are available in Grafana under Explore. Tempo, Loki, and Prometheus datasources are provisioned automatically.
+
 The server listens on `:8080` by default. Override with `listen_addr` in the config file (see [Configuration](#configuration)).
 
 ## Configuration

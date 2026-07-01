@@ -25,7 +25,11 @@ func New(ctx context.Context, serviceName string, cfg config.TracingConfig) (*sd
 		if endpoint == "" {
 			endpoint = "localhost:4317"
 		}
-		exp, err = otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(endpoint))
+		opts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
+		if cfg.Insecure {
+			opts = append(opts, otlptracegrpc.WithInsecure())
+		}
+		exp, err = otlptracegrpc.New(ctx, opts...)
 	default:
 		return nil, nil, fmt.Errorf("unknown trace exporter %q: supported values are stdout, otlp_grpc", cfg.Exporter)
 	}

@@ -1,0 +1,84 @@
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  output {
+    traces  = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces  = [otelcol.exporter.otlp.tempo.input]
+    metrics = [otelcol.exporter.prometheus.default.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+discovery.docker "server" {
+  host = "unix:///var/run/docker.sock"
+
+  filter {
+    name   = "name"
+    values = ["terraform-parse-service-server-1"]
+  }
+}
+
+discovery.relabel "server" {
+  targets = discovery.docker.server.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "server" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.server.output
+  forward_to = [loki.process.server.receiver]
+}
+
+loki.process "server" {
+  forward_to = [loki.write.default.receiver]
+
+  stage.json {
+    expressions = {
+      trace_id = "trace_id",
+      level    = "level",
+    }
+  }
+
+  stage.labels {
+    values = {
+      trace_id = "trace_id",
+      level    = "level",
+    }
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
