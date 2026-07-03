@@ -1,0 +1,10 @@
+environment               = "staging"
+cluster_name              = "tripla-staging-eks"
+vpc_id                    = "vpc-0def456"
+subnet_ids                = ["subnet-0fff666", "subnet-0ggg777"]
+node_instance_types       = ["t3.large", "t3.xlarge"]
+node_desired_size         = 2
+node_min_size             = 1
+node_max_size             = 6
+static_assets_bucket_name = "tripla-static-assets-staging"
+enable_bucket_versioning  = true

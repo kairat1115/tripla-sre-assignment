@@ -1,0 +1,10 @@
+environment               = "dev"
+cluster_name              = "tripla-dev-eks"
+vpc_id                    = "vpc-0abc123"
+subnet_ids                = ["subnet-0aaa111", "subnet-0bbb222"]
+node_instance_types       = ["t3.medium", "t3.large"]
+node_desired_size         = 2
+node_min_size             = 1
+node_max_size             = 4
+static_assets_bucket_name = "tripla-static-assets-dev"
+enable_bucket_versioning  = true

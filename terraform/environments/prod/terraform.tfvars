@@ -1,0 +1,10 @@
+environment               = "prod"
+cluster_name              = "tripla-prod-eks"
+vpc_id                    = "vpc-0xyz789"
+subnet_ids                = ["subnet-0ccc333", "subnet-0ddd444", "subnet-0eee555"]
+node_instance_types       = ["m5.large", "m5.xlarge", "m5a.large"]
+node_desired_size         = 3
+node_min_size             = 2
+node_max_size             = 10
+static_assets_bucket_name = "tripla-static-assets-prod"
+enable_bucket_versioning  = true
