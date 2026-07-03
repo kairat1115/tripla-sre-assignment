@@ -41,6 +41,36 @@ Describe the issues you found and how you approached improving them. Mention any
 
 ## Response
 
+The usage of third-party EKS module is fine and reduces operational overhead to write your own module by trading flexibility with a well-curated modules that is used by many. There are some stale values but overall is ok. The bucket is created with ACL public which might be intentional but is not recommended nowadays as it exposes bucket to the internet with full read permissions.
+```terraform
+resource "aws_s3_bucket" "static_assets" {
+  bucket = "tripla-static-assets"
+  acl    = "public-read" <--- here
+  tags = {
+    Env = var.environment
+  }
+}
+```
+
+Not a big issue is that values are hardcoded and better to provide via tfvars that is easier to review because all configurable values are in the one place.
+
+One issue that was discovered is missing backend file that signals that state file is saved locally which disallows other engineers to operate the infrastructure. I have added s3 backend and with new s3 features we can use object locking without need of dynamo db.
+
+The default design is not flexible for multiple environments where operator cannot introduce new changes to test easily within the existing structure and some values are fixed. The better approach is to split files per environment directory with each own state from terraform 1.10+. Here is the details of [state locking](https://developer.hashicorp.com/terraform/language/backend/s3#state-locking).
+
+I have chosen the approach of common modules and per environment the engineer choses which modules to use. This completely isolates environments and lets user to experiment and control when to upgrade what and which additional features to turn on.
+
+Some values are put in tfvars and could be potentially fetched from remote state, such as vpc id and subnets.
+
+Total cost of refactoring the terraform code:
+  Total cost:            $7.75
+  Total duration (API):  25m 49s
+  Total duration (wall): 1d 21h 49m
+  Total code changes:    2076 lines added, 588 lines removed
+  Usage by model:
+     claude-sonnet-4-6:  97.3k input, 99.0k output, 12.9m cache read, 549.5k cache write ($7.72)
+      claude-haiku-4-5:  405 input, 3.5k output, 83.6k cache read, 6.5k cache write ($0.0346)
+
 # Part 3 (Helm)
 ## Request
 Explain the problems you encountered with the chart, how you addressed them, and how you validated your changes.
