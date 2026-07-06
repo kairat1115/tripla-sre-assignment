@@ -107,6 +107,14 @@ Share your thoughts on how this setup might behave under load or in failure scen
 
 ## Response
 
+Currently there is a limitation of loading templates from filesystem which is cumbersome to manage accross multiple clusters. It would be much preferred to load templates from centralized location, like S3 and lazy load them in local cache with ttl or load all templates in cache and receive updates from some watcher service as a subscriber.
+
+Another limitation is storage of rendered templates where templates are currently stored on the filesystem of a container which is non-persistent. The better way would be to store them remotely or send to storage service that will handle concurrency and storage to s3 or some other persistent storage.
+
+The failure scenario is that currently resources are created for any user, which is creates security issues and unmanageable structure for each user because everyone will fight over each other resources and mess with them.
+
+Also, I would personally not create resources as tf files but create json file that describes each resource, same way as cdktf does that allows to apply resources easier programmatically.
+
 # Part 5 (Approach & Tools)
 ## Request
 Outline the approach you took to complete the task, including any resources, tools, or methods that supported your work.
