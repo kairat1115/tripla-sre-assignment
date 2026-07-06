@@ -55,3 +55,10 @@ hpa:
   maxReplicas: 5
   targetCPUUtilizationPercentage: 50
   targetMemoryUtilizationPercentage: 0
+
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
+automountServiceAccountToken: false

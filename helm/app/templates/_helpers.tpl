@@ -13,3 +13,11 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/name: {{ tpl (default .Chart.Name .Values.nameOverride) . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{- define "app.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "app.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}

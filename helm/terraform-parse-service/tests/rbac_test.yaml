@@ -1,0 +1,79 @@
+suite: terraform-parse-service rbac
+templates:
+  - templates/role.yaml
+  - templates/rolebinding.yaml
+tests:
+  - it: Role renders by default
+    template: templates/role.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Role
+
+  - it: Role name is release-sidecar
+    template: templates/role.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sidecar
+
+  - it: Role grants get list watch on configmaps
+    template: templates/role.yaml
+    asserts:
+      - equal:
+          path: rules[0].resources[0]
+          value: configmaps
+      - contains:
+          path: rules[0].verbs
+          content: get
+      - contains:
+          path: rules[0].verbs
+          content: list
+      - contains:
+          path: rules[0].verbs
+          content: watch
+
+  - it: RoleBinding renders by default
+    template: templates/rolebinding.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: RoleBinding
+
+  - it: RoleBinding roleRef points to correct Role
+    template: templates/rolebinding.yaml
+    asserts:
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-sidecar
+      - equal:
+          path: roleRef.kind
+          value: Role
+
+  - it: RoleBinding subject SA name matches app SA
+    template: templates/rolebinding.yaml
+    asserts:
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME
+
+  - it: Role absent when rbac.create false
+    template: templates/role.yaml
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: RoleBinding absent when rbac.create false
+    template: templates/rolebinding.yaml
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0

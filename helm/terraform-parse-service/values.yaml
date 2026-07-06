@@ -88,6 +88,13 @@ app:
     targetCPUUtilizationPercentage: 60
     targetMemoryUtilizationPercentage: 0
 
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+
+  automountServiceAccountToken: true
+
   configMaps:
     - name: config
       data:
@@ -139,3 +146,6 @@ gateway:
 
 tfTemplates:
   - aws/s3/bucket.tf.tmpl
+
+rbac:
+  create: true

@@ -25,6 +25,8 @@ spec:
         {{- end }}
       {{- end }}
     spec:
+      serviceAccountName: {{ include "app.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
       {{- if .Values.extraVolumes }}
       volumes:
         {{- tpl (toYaml .Values.extraVolumes) . | nindent 8 }}

@@ -1,5 +1,8 @@
 app:
   replicaCount: 2
+  serviceAccount:
+    create: true
+  automountServiceAccountToken: true
   env:
     - name: APP_ENV
       value: "production"
