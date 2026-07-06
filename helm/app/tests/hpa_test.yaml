@@ -1,0 +1,87 @@
+suite: app hpa
+templates:
+  - templates/hpa.yaml
+tests:
+  - it: renders zero documents when hpa.enabled is false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders one HPA document when hpa.enabled is true
+    set:
+      hpa.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: apiVersion
+          value: autoscaling/v2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME
+
+  - it: sets minReplicas and maxReplicas from values
+    set:
+      hpa.enabled: true
+      hpa.minReplicas: 2
+      hpa.maxReplicas: 8
+    asserts:
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 8
+
+  - it: CPU metric has correct averageUtilization
+    set:
+      hpa.enabled: true
+      hpa.targetCPUUtilizationPercentage: 60
+    asserts:
+      - equal:
+          path: spec.metrics[0].resource.name
+          value: cpu
+      - equal:
+          path: spec.metrics[0].resource.target.averageUtilization
+          value: 60
+
+  - it: no memory metric when targetMemoryUtilizationPercentage is 0
+    set:
+      hpa.enabled: true
+      hpa.targetMemoryUtilizationPercentage: 0
+    asserts:
+      - isNull:
+          path: spec.metrics[1]
+
+  - it: adds memory metric when targetMemoryUtilizationPercentage is non-zero
+    set:
+      hpa.enabled: true
+      hpa.targetMemoryUtilizationPercentage: 80
+    asserts:
+      - equal:
+          path: spec.metrics[1].resource.name
+          value: memory
+      - equal:
+          path: spec.metrics[1].resource.target.type
+          value: Utilization
+      - equal:
+          path: spec.metrics[1].resource.target.averageUtilization
+          value: 80
+
+  - it: scaleTargetRef points to the correct Deployment
+    set:
+      hpa.enabled: true
+    release:
+      name: myapp
+    asserts:
+      - equal:
+          path: spec.scaleTargetRef.apiVersion
+          value: apps/v1
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Deployment
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: myapp

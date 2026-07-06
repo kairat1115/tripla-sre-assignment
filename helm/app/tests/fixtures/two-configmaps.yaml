@@ -1,0 +1,9 @@
+configMaps:
+  - name: config
+    data:
+      config.yaml:
+        key: value
+  - name: extra
+    data:
+      extra.yaml: |
+        plain: text

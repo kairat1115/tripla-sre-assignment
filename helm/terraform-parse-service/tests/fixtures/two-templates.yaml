@@ -1,0 +1,3 @@
+tfTemplates:
+  - aws/s3/bucket.tf.tmpl
+  - aws/s3/rds.tf.tmpl

@@ -1,0 +1,65 @@
+suite: gateway gateway
+templates:
+  - templates/gateway.yaml
+tests:
+  - it: renders zero documents when istio.enabled is false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders zero documents when istio.enabled true but gateway.create false
+    set:
+      istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders one Gateway when both flags are true
+    set:
+      istio.enabled: true
+      istio.gateway.create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Gateway
+
+  - it: selector contains istio ingressgateway
+    set:
+      istio.enabled: true
+      istio.gateway.create: true
+    asserts:
+      - equal:
+          path: spec.selector.istio
+          value: ingressgateway
+
+  - it: port number matches istio.gateway.port
+    set:
+      istio.enabled: true
+      istio.gateway.create: true
+      istio.gateway.port: 443
+    asserts:
+      - equal:
+          path: spec.servers[0].port.number
+          value: 443
+
+  - it: hosts matches istio.gateway.hosts
+    set:
+      istio.enabled: true
+      istio.gateway.create: true
+      istio.gateway.hosts[0]: "example.com"
+    asserts:
+      - equal:
+          path: spec.servers[0].hosts[0]
+          value: "example.com"
+
+  - it: metadata.name equals the release name
+    release:
+      name: myapp
+    set:
+      istio.enabled: true
+      istio.gateway.create: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: myapp

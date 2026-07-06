@@ -1,0 +1,11 @@
+remote: origin
+target-branch: main
+chart-dirs:
+  - .
+helm-extra-args: --timeout 600s
+lint-conf: .yamllint
+validate-maintainers: false
+validate-chart-schema: false
+check-version-increment: false
+additional-commands:
+  - sh -ec "if [[ -d '{{ .Path }}/tests' ]]; then helm unittest --strict --debug --with-subchart=false --file 'tests/*_test.yaml' --file 'tests/**/*_test.yaml' {{ .Path }}; else true; fi"

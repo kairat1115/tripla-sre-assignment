@@ -1,0 +1,7 @@
+configMaps:
+  - name: config
+    data:
+      config.yaml:
+        key: value
+        nested:
+          field: example

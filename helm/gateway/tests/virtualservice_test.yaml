@@ -1,0 +1,72 @@
+suite: gateway virtualservice
+templates:
+  - templates/virtualservice.yaml
+tests:
+  - it: renders zero documents when istio.enabled is false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders zero documents when virtualService.enabled is false
+    set:
+      istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders one VirtualService when both flags are true
+    set:
+      istio.enabled: true
+      istio.virtualService.enabled: true
+      istio.virtualService.hosts[0]: "example.com"
+      istio.gateway.create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VirtualService
+
+  - it: spec.hosts matches istio.virtualService.hosts
+    set:
+      istio.enabled: true
+      istio.virtualService.enabled: true
+      istio.virtualService.hosts[0]: "example.com"
+      istio.gateway.create: true
+    asserts:
+      - equal:
+          path: spec.hosts[0]
+          value: "example.com"
+
+  - it: spec.gateways[0] equals release name when gateway.create is true
+    release:
+      name: myapp
+    set:
+      istio.enabled: true
+      istio.virtualService.enabled: true
+      istio.virtualService.hosts[0]: "example.com"
+      istio.gateway.create: true
+    asserts:
+      - equal:
+          path: spec.gateways[0]
+          value: myapp
+
+  - it: spec.gateways[0] equals istio.gateway.name when gateway.create is false
+    set:
+      istio.enabled: true
+      istio.virtualService.enabled: true
+      istio.virtualService.hosts[0]: "example.com"
+      istio.gateway.create: false
+      istio.gateway.name: "external-gateway"
+    asserts:
+      - equal:
+          path: spec.gateways[0]
+          value: "external-gateway"
+
+  - it: fails with required error when gateway.create false and name empty
+    set:
+      istio.enabled: true
+      istio.virtualService.enabled: true
+      istio.virtualService.hosts[0]: "example.com"
+    asserts:
+      - failedTemplate:
+          errorMessage: "istio.gateway.name is required when gateway.create is false"

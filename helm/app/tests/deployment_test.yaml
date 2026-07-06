@@ -1,0 +1,176 @@
+suite: app deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: renders a Deployment with default values
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ":"
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 80
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /
+      - isNull:
+          path: spec.template.metadata.annotations
+      - isNull:
+          path: spec.template.spec.volumes
+      - isNull:
+          path: spec.template.spec.containers[0].args
+      - isNull:
+          path: spec.template.spec.containers[0].env
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+
+  - it: omits spec.replicas when hpa.enabled is true
+    set:
+      hpa.enabled: true
+    asserts:
+      - isNull:
+          path: spec.replicas
+
+  - it: uses tcpSocket readiness and liveness probes
+    set:
+      probes.type: tcpSocket
+      probes.readiness.port: 8080
+      probes.liveness.port: 8080
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: 8080
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 8080
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+
+  - it: renders args
+    set:
+      args[0]: "-text=hello"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args[0]
+          value: "-text=hello"
+
+  - it: renders env vars
+    values:
+      - fixtures/env.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: FOO
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: bar
+
+  - it: renders extraPorts alongside the http port
+    values:
+      - fixtures/extra-ports.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: http
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].name
+          value: metrics
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].containerPort
+          value: 9091
+
+  - it: renders extraVolumes and extraVolumeMounts
+    values:
+      - fixtures/extra-volumes.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: my-vol
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: my-vol
+            mountPath: /data
+
+  - it: appends sidecars after the main container
+    values:
+      - fixtures/sidecars.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: app
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: my-sidecar
+
+  - it: renders podAnnotations
+    values:
+      - fixtures/pod-annotations.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "9091"
+
+  - it: renders checksum annotation for configMaps entry
+    values:
+      - fixtures/configmaps.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: "^[a-f0-9]{64}$"
+
+  - it: uses nameOverride in selectorLabels
+    set:
+      nameOverride: my-service
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: my-service
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: my-service
+
+  - it: uses fullnameOverride as the Deployment name
+    set:
+      fullnameOverride: custom-name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: custom-name
+
+  - it: uses release name as Deployment name when no overrides are set
+    release:
+      name: myapp
+    asserts:
+      - equal:
+          path: metadata.name
+          value: myapp
+
+  - it: matchLabels and pod template labels share the same instance value
+    release:
+      name: myapp
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: myapp
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: myapp

@@ -1,0 +1,6 @@
+extraVolumes:
+  - name: my-vol
+    emptyDir: {}
+extraVolumeMounts:
+  - name: my-vol
+    mountPath: /data

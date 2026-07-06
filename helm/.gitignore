@@ -1,2 +1,5 @@
 # Helm dependency tarballs — regenerated via `helm dep update`
 **/charts/*.tgz
+
+# helm-unittest snapshots
+**/__snapshot__/

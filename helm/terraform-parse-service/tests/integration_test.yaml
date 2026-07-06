@@ -1,0 +1,118 @@
+suite: terraform-parse-service integration
+templates:
+  - charts/app/templates/deployment.yaml
+  - charts/app/templates/service.yaml
+  - charts/app/templates/configmap.yaml
+  - charts/app/templates/hpa.yaml
+  - charts/gateway/templates/gateway.yaml
+  - charts/gateway/templates/virtualservice.yaml
+  - templates/configmap-templates.yaml
+tests:
+  - it: Deployment renders with base values
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+
+  - it: no HPA rendered with base values
+    template: charts/app/templates/hpa.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: containers[1] is k8s-sidecar
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: k8s-sidecar
+
+  - it: k8s-sidecar image is kiwigrid/k8s-sidecar:1.27.5
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: kiwigrid/k8s-sidecar:1.27.5
+
+  - it: pod spec includes templates emptyDir volume
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: templates
+            emptyDir: {}
+
+  - it: pod spec includes output emptyDir volume
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: output
+            emptyDir: {}
+
+  - it: readinessProbe is tcpSocket on port 8080
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: 8080
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+
+  - it: livenessProbe is tcpSocket with no httpGet
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 8080
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+
+  - it: app-config volumeMount is readOnly at /configs
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: app-config
+            mountPath: /configs
+            readOnly: true
+
+  - it: k8s-sidecar LABEL env var equals terraform-parse-service/template
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: LABEL
+            value: terraform-parse-service/template
+
+  - it: k8s-sidecar FOLDER env var equals /templates
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: FOLDER
+            value: /templates
+
+  - it: pod template has checksum/config annotation
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: "^[a-f0-9]{64}$"
+
+  - it: HPA renders when staging overlay sets hpa.enabled true
+    template: charts/app/templates/hpa.yaml
+    values:
+      - ../values-staging.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: HorizontalPodAutoscaler

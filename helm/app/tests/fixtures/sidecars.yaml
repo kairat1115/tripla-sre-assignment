@@ -1,0 +1,3 @@
+sidecars:
+  - name: my-sidecar
+    image: busybox:latest

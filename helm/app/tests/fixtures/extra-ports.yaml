@@ -1,0 +1,4 @@
+extraPorts:
+  - name: metrics
+    containerPort: 9091
+    protocol: TCP

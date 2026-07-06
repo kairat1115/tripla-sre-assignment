@@ -1,0 +1,63 @@
+suite: gateway destinationrule
+templates:
+  - templates/destinationrule.yaml
+tests:
+  - it: renders zero documents when istio.enabled is false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders zero documents when destinationRule.enabled is false
+    set:
+      istio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders one DestinationRule when both flags are true
+    set:
+      istio.enabled: true
+      istio.destinationRule.enabled: true
+      istio.destinationRule.host: "my-svc.default.svc.cluster.local"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: DestinationRule
+
+  - it: spec.host equals istio.destinationRule.host
+    set:
+      istio.enabled: true
+      istio.destinationRule.enabled: true
+      istio.destinationRule.host: "my-svc.default.svc.cluster.local"
+    asserts:
+      - equal:
+          path: spec.host
+          value: "my-svc.default.svc.cluster.local"
+
+  - it: spec.trafficPolicy is absent when trafficPolicy is empty
+    set:
+      istio.enabled: true
+      istio.destinationRule.enabled: true
+      istio.destinationRule.host: "my-svc.default.svc.cluster.local"
+    asserts:
+      - isNull:
+          path: spec.trafficPolicy
+
+  - it: spec.trafficPolicy is present when trafficPolicy is non-empty
+    set:
+      istio.enabled: true
+      istio.destinationRule.enabled: true
+      istio.destinationRule.host: "my-svc.default.svc.cluster.local"
+      istio.destinationRule.trafficPolicy.connectionPool.tcp.maxConnections: 100
+    asserts:
+      - isNotEmpty:
+          path: spec.trafficPolicy
+
+  - it: fails with required error when host is empty
+    set:
+      istio.enabled: true
+      istio.destinationRule.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "istio.destinationRule.host is required"
