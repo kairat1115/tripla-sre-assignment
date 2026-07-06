@@ -1,8 +1,8 @@
 listen_addr: ":8080"
+environment: "production"
+version: "dev"
 logger:
   level: "info"
-  metadata:
-    service: "terraform-parse-service"
 tracing:
   exporter: "otlp_grpc"
   endpoint: "alloy:4317"

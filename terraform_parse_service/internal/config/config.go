@@ -29,11 +29,14 @@ type MetricsConfig struct {
 }
 
 type Config struct {
-	ListenAddr string                    `yaml:"listen_addr"`
-	Logger     LoggerConfig              `yaml:"logger"`
-	Tracing    TracingConfig             `yaml:"tracing"`
-	Metrics    MetricsConfig             `yaml:"metrics"`
-	Providers  map[string]ProviderConfig `yaml:"providers"`
+	ListenAddr  string                    `yaml:"listen_addr"`
+	ServiceName string                    `yaml:"service_name"`
+	Environment string                    `yaml:"environment"`
+	Version     string                    `yaml:"version"`
+	Logger      LoggerConfig              `yaml:"logger"`
+	Tracing     TracingConfig             `yaml:"tracing"`
+	Metrics     MetricsConfig             `yaml:"metrics"`
+	Providers   map[string]ProviderConfig `yaml:"providers"`
 }
 
 func Load() (Config, error) {
@@ -51,6 +54,9 @@ func Load() (Config, error) {
 	var cfg Config
 	if err := provider.Get(uberconfig.Root).Populate(&cfg); err != nil {
 		return Config{}, fmt.Errorf("populate config: %w", err)
+	}
+	if cfg.ServiceName == "" {
+		cfg.ServiceName = "terraform-parse-service"
 	}
 	return cfg, nil
 }

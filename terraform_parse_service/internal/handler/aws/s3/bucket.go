@@ -102,7 +102,7 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		trace.WithSpanKind(trace.SpanKindServer),
 		trace.WithAttributes(
 			attribute.String("http.request.method", method),
-			attribute.String("url.path", path),
+			attribute.String("http.route", "POST /api/aws/v1/s3/buckets"),
 			attribute.String("network.peer.address", r.RemoteAddr),
 		),
 	)
@@ -110,16 +110,22 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	base := []zap.Field{
 		zap.String("http.request.method", method),
-		zap.String("url.path", path),
+		zap.String("http.route", "POST /api/aws/v1/s3/buckets"),
 		zap.String("network.peer.address", r.RemoteAddr),
 		zap.String("trace_id", span.SpanContext().TraceID().String()),
 	}
 
+	readStart := time.Now()
 	body, err := io.ReadAll(r.Body)
+	span.SetAttributes(attribute.Float64("read_body.duration_ms", float64(time.Since(readStart).Milliseconds())))
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
-		span.SetAttributes(attribute.Int("http.response.status_code", http.StatusBadRequest))
+		span.SetAttributes(
+			attribute.Int("http.response.status_code", http.StatusBadRequest),
+			attribute.String("exception.slug", "err-handler-body-read"),
+			attribute.Bool("error", true),
+		)
 		h.logger.Info("request body read failed", append(base,
 			zap.Int("http.response.status_code", http.StatusBadRequest),
 			zap.String("exception.message", err.Error()),
@@ -128,13 +134,18 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		respond(handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
 		return
 	}
-	span.SetAttributes(attribute.String("http.request.body", string(body)))
 
+	decodeStart := time.Now()
 	var req bucketRequest
 	if err := json.Unmarshal(body, &req); err != nil {
+		span.SetAttributes(attribute.Float64("json_decode.duration_ms", float64(time.Since(decodeStart).Milliseconds())))
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
-		span.SetAttributes(attribute.Int("http.response.status_code", http.StatusBadRequest))
+		span.SetAttributes(
+			attribute.Int("http.response.status_code", http.StatusBadRequest),
+			attribute.String("exception.slug", "err-handler-json-decode"),
+			attribute.Bool("error", true),
+		)
 		h.logger.Info("request body decode failed", append(base,
 			zap.Int("http.response.status_code", http.StatusBadRequest),
 			zap.String("exception.message", err.Error()),
@@ -143,13 +154,18 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		respond(handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
 		return
 	}
+	span.SetAttributes(attribute.Float64("json_decode.duration_ms", float64(time.Since(decodeStart).Milliseconds())))
 
 	p := req.Payload.Properties
+	validateStart := time.Now()
 	if err := p.Validate(); err != nil {
+		span.SetAttributes(attribute.Float64("validate.duration_ms", float64(time.Since(validateStart).Milliseconds())))
 		msg := err.Error()
 		span.SetStatus(codes.Error, msg)
 		span.SetAttributes(
 			attribute.Int("http.response.status_code", http.StatusUnprocessableEntity),
+			attribute.String("exception.slug", "err-handler-validation"),
+			attribute.Bool("error", true),
 			attribute.String("service.aws.s3.region", p.Region),
 			attribute.String("service.aws.s3.acl", p.ACL),
 			attribute.String("service.aws.s3.bucket_name", p.BucketName),
@@ -164,6 +180,12 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		respond(handler.Result{Code: http.StatusUnprocessableEntity, Msg: msg, Err: err})
 		return
 	}
+	span.SetAttributes(attribute.Float64("validate.duration_ms", float64(time.Since(validateStart).Milliseconds())))
+	span.SetAttributes(
+		attribute.String("aws.s3.region", p.Region),
+		attribute.String("aws.s3.acl", p.ACL),
+		attribute.String("aws.s3.bucket_name", p.BucketName),
+	)
 
 	gen := &bucketGenerator{props: p, ctx: ctx}
 	outputPath, err := h.svc.Generate(gen)
@@ -172,15 +194,14 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		span.SetAttributes(
 			attribute.Int("http.response.status_code", http.StatusInternalServerError),
-			attribute.String("service.aws.s3.region", p.Region),
-			attribute.String("service.aws.s3.acl", p.ACL),
-			attribute.String("service.aws.s3.bucket_name", p.BucketName),
+			attribute.String("exception.slug", "err-handler-generate"),
+			attribute.Bool("error", true),
 		)
 		h.logger.Error("generation failed", append(base,
 			zap.Int("http.response.status_code", http.StatusInternalServerError),
-			zap.String("service.aws.s3.region", p.Region),
-			zap.String("service.aws.s3.acl", p.ACL),
-			zap.String("service.aws.s3.bucket_name", p.BucketName),
+			zap.String("aws.s3.region", p.Region),
+			zap.String("aws.s3.acl", p.ACL),
+			zap.String("aws.s3.bucket_name", p.BucketName),
 			zap.String("exception.message", err.Error()),
 			zap.Float64("http.server.request.duration", time.Since(start).Seconds()),
 		)...)
@@ -191,16 +212,13 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(
 		attribute.Int("http.response.status_code", http.StatusCreated),
-		attribute.String("service.aws.s3.region", p.Region),
-		attribute.String("service.aws.s3.acl", p.ACL),
-		attribute.String("service.aws.s3.bucket_name", p.BucketName),
 		attribute.String("output.path", outputPath),
 	)
 	h.logger.Info("terraform config generated", append(base,
 		zap.Int("http.response.status_code", http.StatusCreated),
-		zap.String("service.aws.s3.region", p.Region),
-		zap.String("service.aws.s3.acl", p.ACL),
-		zap.String("service.aws.s3.bucket_name", p.BucketName),
+		zap.String("aws.s3.region", p.Region),
+		zap.String("aws.s3.acl", p.ACL),
+		zap.String("aws.s3.bucket_name", p.BucketName),
 		zap.String("output.path", outputPath),
 		zap.Float64("http.server.request.duration", time.Since(start).Seconds()),
 	)...)

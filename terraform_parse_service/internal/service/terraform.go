@@ -76,7 +76,11 @@ func (s *TerraformService) Generate(g Generator) (string, error) {
 	)
 	defer span.End()
 
-	recordErr := func(err error) (string, error) {
+	recordErr := func(slug string, err error) (string, error) {
+		span.SetAttributes(
+			attribute.String("exception.slug", slug),
+			attribute.Bool("error", true),
+		)
 		s.m.GenerationTotal.WithLabelValues(g.Provider(), resource, "error").Inc()
 		s.m.GenerationDuration.WithLabelValues(g.Provider(), resource).Observe(time.Since(start).Seconds())
 		return "", err
@@ -86,27 +90,27 @@ func (s *TerraformService) Generate(g Generator) (string, error) {
 	if !ok {
 		err := fmt.Errorf("no templates registered for provider %s", g.Provider())
 		span.SetStatus(codes.Error, err.Error())
-		return recordErr(err)
+		return recordErr("err-service-no-template", err)
 	}
 	writer, ok := s.writers[g.Provider()]
 	if !ok {
 		err := fmt.Errorf("no writer registered for provider %s", g.Provider())
 		span.SetStatus(codes.Error, err.Error())
-		return recordErr(err)
+		return recordErr("err-service-no-writer", err)
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, g.TemplateName(), g.TemplateData()); err != nil {
 		err = fmt.Errorf("render template %s: %w", g.TemplateName(), err)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
-		return recordErr(err)
+		return recordErr("err-service-render-template", err)
 	}
 	path, err := writer.Write(ctx, g.StoragePath(), buf.Bytes())
 	if err != nil {
 		err = fmt.Errorf("write storage: %w", err)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
-		return recordErr(err)
+		return recordErr("err-service-storage-write", err)
 	}
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.String("output.path", path))

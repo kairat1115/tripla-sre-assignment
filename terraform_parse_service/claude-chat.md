@@ -191,3 +191,19 @@ add a detailed todo list to the plan, with all the phases and individual tasks n
 ---
 
 implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.
+
+# Request to create plan6.md
+
+review the service with honeycomb skills for the observability. do complete refactor if required. write a detailed plan6.md document outlining how to implement this. include code snippets
+
+---
+
+some remarks and edits to plan, and ask clause with the following - I added a few notes to the document, address all the notes and update the document accordingly. don’t implement yet
+
+---
+
+add a detailed todo list to the plan, with all the phases and individual tasks necessary to complete the plan - don’t implement yet
+
+---
+
+implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.

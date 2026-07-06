@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/service"
 )
 
@@ -22,8 +24,12 @@ func (s *stubTerraform) Generate(_ service.Generator) (string, error) {
 	return s.path, s.err
 }
 
+func testMetrics() *metrics.Metrics {
+	return metrics.New(prometheus.NewRegistry())
+}
+
 func TestBucketHandler_BadJSON(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{}, zap.NewNop())
+	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString("{bad"))
 
@@ -40,7 +46,7 @@ func TestBucketHandler_BadJSON(t *testing.T) {
 }
 
 func TestBucketHandler_MissingProperty(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{}, zap.NewNop())
+	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
@@ -53,7 +59,7 @@ func TestBucketHandler_MissingProperty(t *testing.T) {
 }
 
 func TestBucketHandler_GenerationError(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("render failed")}, zap.NewNop())
+	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("render failed")}, zap.NewNop(), testMetrics())
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"b"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
@@ -66,7 +72,7 @@ func TestBucketHandler_GenerationError(t *testing.T) {
 }
 
 func TestBucketHandler_Success(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{path: "/out/s3/b/main.tf"}, zap.NewNop())
+	h := NewBucketHandler(&stubTerraform{path: "/out/s3/b/main.tf"}, zap.NewNop(), testMetrics())
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"b"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))

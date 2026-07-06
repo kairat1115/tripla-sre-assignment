@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -14,37 +15,41 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
 )
 
-func New(ctx context.Context, serviceName string, cfg config.TracingConfig) (*sdktrace.TracerProvider, func(context.Context) error, error) {
+func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, func(context.Context) error, error) {
 	var exp sdktrace.SpanExporter
 	var err error
-	switch cfg.Exporter {
+	switch cfg.Tracing.Exporter {
 	case "stdout":
 		exp, err = stdouttrace.New()
 	case "otlp_grpc":
-		endpoint := cfg.Endpoint
+		endpoint := cfg.Tracing.Endpoint
 		if endpoint == "" {
 			endpoint = "localhost:4317"
 		}
 		opts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
-		if cfg.Insecure {
+		if cfg.Tracing.Insecure {
 			opts = append(opts, otlptracegrpc.WithInsecure())
 		}
 		exp, err = otlptracegrpc.New(ctx, opts...)
 	default:
-		return nil, nil, fmt.Errorf("unknown trace exporter %q: supported values are stdout, otlp_grpc", cfg.Exporter)
+		return nil, nil, fmt.Errorf("unknown trace exporter %q: supported values are stdout, otlp_grpc", cfg.Tracing.Exporter)
 	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("build trace exporter: %w", err)
 	}
 	res, err := resource.New(ctx,
-		resource.WithAttributes(semconv.ServiceNameKey.String(serviceName)),
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(cfg.ServiceName),
+			semconv.ServiceVersionKey.String(cfg.Version),
+			attribute.String("service.environment", cfg.Environment),
+		),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build trace resource: %w", err)
 	}
 	sampler := sdktrace.AlwaysSample()
-	if cfg.SampleRatio < 1.0 {
-		sampler = sdktrace.TraceIDRatioBased(cfg.SampleRatio)
+	if cfg.Tracing.SampleRatio < 1.0 {
+		sampler = sdktrace.TraceIDRatioBased(cfg.Tracing.SampleRatio)
 	}
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),

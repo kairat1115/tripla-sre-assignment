@@ -1,8 +1,8 @@
 listen_addr: ":8080"
+environment: "development"
+version: "dev"
 logger:
   level: "info"
-  metadata:
-    service: "terraform-parse-service"
 tracing:
   exporter: "stdout"
   endpoint: "localhost:4317"

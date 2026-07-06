@@ -29,7 +29,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	l, err := logger.New(cfg.Logger)
+	l, err := logger.New(cfg)
 	if err != nil {
 		bootstrap.Error("logger init failed", zap.String("error", err.Error()))
 		os.Exit(1)
@@ -37,7 +37,7 @@ func main() {
 	defer l.Sync()
 	zap.ReplaceGlobals(l)
 
-	_, shutdown, err := tracing.New(context.Background(), cfg.Logger.Metadata["service"], cfg.Tracing)
+	_, shutdown, err := tracing.New(context.Background(), cfg)
 	if err != nil {
 		zap.L().Error("tracer init failed", zap.String("error", err.Error()))
 		os.Exit(1)

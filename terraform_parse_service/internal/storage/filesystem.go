@@ -39,6 +39,10 @@ func (w *FSWriter) Write(ctx context.Context, name string, content []byte) (stri
 		err = fmt.Errorf("mkdir %s: %w", dir, err)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
+		span.SetAttributes(
+			attribute.String("exception.slug", "err-storage-mkdir"),
+			attribute.Bool("error", true),
+		)
 		return "", err
 	}
 	path := filepath.Join(dir, "main.tf")
@@ -46,6 +50,10 @@ func (w *FSWriter) Write(ctx context.Context, name string, content []byte) (stri
 		err = fmt.Errorf("write %s: %w", path, err)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
+		span.SetAttributes(
+			attribute.String("exception.slug", "err-storage-write-file"),
+			attribute.Bool("error", true),
+		)
 		return "", err
 	}
 	span.SetStatus(codes.Ok, "")
