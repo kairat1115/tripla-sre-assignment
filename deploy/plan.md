@@ -57,11 +57,12 @@ Makefile: `make image-load` (runs `image-build` first)
 
 ## Step 3: Install Istio
 
-Use the `minimal` profile — Istiod control plane + IngressGateway only.
+Use the `default` profile — includes Istiod + IngressGateway. The `minimal` profile omits the IngressGateway.
 
 ```bash
-istioctl install --set profile=minimal -y
+istioctl install --set profile=default -y
 kubectl rollout status deployment/istiod -n istio-system
+kubectl rollout status deployment/istio-ingressgateway -n istio-system
 ```
 
 Patch the IngressGateway Service to NodePort 30080 (matches the kind port mapping):

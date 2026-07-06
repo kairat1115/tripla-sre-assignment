@@ -100,8 +100,9 @@ Multi-stage build: `golang:1.25-alpine` builder → `scratch` runtime. `imagePul
 ### Step 3: Install Istio
 
 ```bash
-istioctl install --set profile=minimal -y
+istioctl install --set profile=default -y
 kubectl rollout status deployment/istiod -n istio-system
+kubectl rollout status deployment/istio-ingressgateway -n istio-system
 ```
 
 Patch the IngressGateway Service type to NodePort on 30080 (matches the kind port mapping):

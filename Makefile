@@ -35,8 +35,9 @@ image-load: image-build
 ## ── Istio ────────────────────────────────────────────────────────────────────
 
 istio-install:
-	istioctl install --set profile=minimal -y
+	istioctl install --set profile=default -y
 	kubectl rollout status deployment/istiod -n istio-system
+	kubectl rollout status deployment/istio-ingressgateway -n istio-system
 
 istio-patch:
 	kubectl patch svc istio-ingressgateway -n istio-system \
