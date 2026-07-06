@@ -120,3 +120,7 @@ Also, I would personally not create resources as tf files but create json file t
 Outline the approach you took to complete the task, including any resources, tools, or methods that supported your work.
 
 ## Response
+
+I have used CLAUDE to complete all the codding and only guided it via meticulous review and aligning plans. You can observe plan.md in each tasked folder.
+
+And, by my experience and research I have been selecting which frameworks to instruct claude to use them.
