@@ -58,7 +58,7 @@ One issue that was discovered is missing backend file that signals that state fi
 
 The default design is not flexible for multiple environments where operator cannot introduce new changes to test easily within the existing structure and some values are fixed. The better approach is to split files per environment directory with each own state from terraform 1.10+. Here is the details of [state locking](https://developer.hashicorp.com/terraform/language/backend/s3#state-locking).
 
-I have chosen the approach of common modules and per environment the engineer choses which modules to use. This completely isolates environments and lets user to experiment and control when to upgrade what and which additional features to turn on.
+I have chosen the approach of common modules (currently using only third party modules) and per environment the engineer choses which modules to use. This completely isolates environments and lets user to experiment and control when to upgrade what and which additional features to turn on.
 
 Some values are put in tfvars and could be potentially fetched from remote state, such as vpc id and subnets.
 
