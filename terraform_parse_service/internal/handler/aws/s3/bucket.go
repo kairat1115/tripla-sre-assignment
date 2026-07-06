@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -22,6 +24,8 @@ import (
 
 const tracerName = "handler.aws.s3"
 
+var bucketNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9\-\.]*[a-z0-9]$`)
+
 type bucketProperties struct {
 	Region     string `json:"aws-region"`
 	ACL        string `json:"acl"`
@@ -36,6 +40,12 @@ func (p bucketProperties) Validate() error {
 		return fmt.Errorf("missing required property: acl")
 	case p.BucketName == "":
 		return fmt.Errorf("missing required property: bucket-name")
+	case len(p.BucketName) < 3 || len(p.BucketName) > 63:
+		return fmt.Errorf("invalid bucket-name: must be 3–63 characters")
+	case !bucketNameRE.MatchString(p.BucketName):
+		return fmt.Errorf("invalid bucket-name: must contain only lowercase letters, digits, hyphens, and dots, and start/end with a letter or digit")
+	case strings.Contains(p.BucketName, ".."):
+		return fmt.Errorf("invalid bucket-name: must not contain consecutive dots")
 	default:
 		return nil
 	}
@@ -56,9 +66,9 @@ type bucketGenerator struct {
 	ctx   context.Context
 }
 
-func (g *bucketGenerator) Provider() string     { return "aws" }
-func (g *bucketGenerator) TemplateName() string { return "s3/bucket.tf.tmpl" }
-func (g *bucketGenerator) StoragePath() string  { return "s3/" + g.props.BucketName }
+func (g *bucketGenerator) Provider() string         { return "aws" }
+func (g *bucketGenerator) TemplateName() string     { return "s3/bucket.tf.tmpl" }
+func (g *bucketGenerator) StoragePath() string      { return "s3/" + g.props.BucketName }
 func (g *bucketGenerator) Context() context.Context { return g.ctx }
 func (g *bucketGenerator) TemplateData() any {
 	return struct {

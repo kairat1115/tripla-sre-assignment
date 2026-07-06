@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -35,6 +36,15 @@ func (w *FSWriter) Write(ctx context.Context, name string, content []byte) (stri
 	defer span.End()
 
 	dir := filepath.Join(w.BaseDir, name)
+	if !isWithinBase(w.BaseDir, dir) {
+		err := fmt.Errorf("storage path %q escapes base directory", name)
+		span.SetStatus(codes.Error, err.Error())
+		span.SetAttributes(
+			attribute.String("exception.slug", "err-storage-path-traversal"),
+			attribute.Bool("error", true),
+		)
+		return "", err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		err = fmt.Errorf("mkdir %s: %w", dir, err)
 		span.SetStatus(codes.Error, err.Error())
@@ -59,4 +69,9 @@ func (w *FSWriter) Write(ctx context.Context, name string, content []byte) (stri
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.String("output.path", path))
 	return path, nil
+}
+
+func isWithinBase(base, target string) bool {
+	base = filepath.Clean(base) + string(filepath.Separator)
+	return strings.HasPrefix(filepath.Clean(target)+string(filepath.Separator), base)
 }

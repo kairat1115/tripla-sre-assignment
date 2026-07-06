@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -60,7 +61,7 @@ func TestBucketHandler_MissingProperty(t *testing.T) {
 
 func TestBucketHandler_GenerationError(t *testing.T) {
 	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("render failed")}, zap.NewNop(), testMetrics())
-	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"b"}}}`
+	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"my-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 
@@ -72,8 +73,8 @@ func TestBucketHandler_GenerationError(t *testing.T) {
 }
 
 func TestBucketHandler_Success(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{path: "/out/s3/b/main.tf"}, zap.NewNop(), testMetrics())
-	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"b"}}}`
+	h := NewBucketHandler(&stubTerraform{path: "/out/s3/my-bucket/main.tf"}, zap.NewNop(), testMetrics())
+	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"my-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 
@@ -84,7 +85,39 @@ func TestBucketHandler_Success(t *testing.T) {
 	}
 	var resp bucketResponse
 	_ = json.NewDecoder(rec.Body).Decode(&resp)
-	if resp.OutputPath != "/out/s3/b/main.tf" {
+	if resp.OutputPath != "/out/s3/my-bucket/main.tf" {
 		t.Fatalf("unexpected output_path: %s", resp.OutputPath)
+	}
+}
+
+func TestBucketHandler_InvalidBucketName(t *testing.T) {
+	cases := []struct {
+		name       string
+		bucketName string
+	}{
+		{"path traversal with dots", "../../etc/passwd"},
+		{"absolute path", "/etc/passwd"},
+		{"slash in name", "foo/bar"},
+		{"uppercase", "MyBucket"},
+		{"too short", "ab"},
+		{"too long", strings.Repeat("a", 64)},
+		{"consecutive dots", "foo..bar"},
+		{"trailing dot", "foo."},
+		{"leading hyphen", "-foo"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := fmt.Sprintf(
+				`{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":%q}}}`,
+				tc.bucketName,
+			)
+			h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
+			h.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("%s: want 422, got %d", tc.name, rec.Code)
+			}
+		})
 	}
 }
