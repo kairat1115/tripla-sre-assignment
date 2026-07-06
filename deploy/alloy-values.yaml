@@ -1,0 +1,77 @@
+alloy:
+  configMap:
+    content: |
+      discovery.kubernetes "app_pods" {
+        role = "pod"
+        namespaces {
+          names = ["terraform-parse-service"]
+        }
+      }
+
+      discovery.relabel "app_pods" {
+        targets = discovery.kubernetes.app_pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          regex         = "terraform-parse-service"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = [
+            "__meta_kubernetes_pod_uid",
+            "__meta_kubernetes_pod_container_name",
+          ]
+          separator    = "/"
+          target_label = "__path__"
+          replacement  = "/var/log/pods/*$1/*.log"
+        }
+      }
+
+      loki.source.file "app_logs" {
+        targets    = discovery.relabel.app_pods.output
+        forward_to = [loki.process.app.receiver]
+      }
+
+      loki.process "app" {
+        forward_to = [loki.write.default.receiver]
+
+        stage.json {
+          expressions = {
+            trace_id = "trace_id",
+            level    = "level",
+          }
+        }
+        stage.labels {
+          values = {
+            trace_id = "trace_id",
+            level    = "level",
+          }
+        }
+      }
+
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+
+controller:
+  type: daemonset
+
+rbac:
+  create: true
+
+serviceAccount:
+  create: true

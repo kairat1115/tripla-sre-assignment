@@ -1,0 +1,28 @@
+app:
+  image:
+    repository: terraform-parse-service
+    pullPolicy: IfNotPresent
+
+  configMaps:
+    - name: config
+      data:
+        config.yaml:
+          listen_addr: ":8080"
+          environment: "production"
+          version: "production"
+          logger:
+            level: "info"
+            metadata:
+              service: "terraform-parse-service"
+              env: "production"
+          tracing:
+            exporter: "otlp_grpc"
+            endpoint: "tempo.monitoring.svc.cluster.local:4317"
+            insecure: true
+            sample_ratio: 0.1
+          metrics:
+            addr: ":9091"
+          providers:
+            aws:
+              templates_dir: "/templates/aws"
+              storage_dir: "/output/aws"
