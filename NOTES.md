@@ -111,6 +111,8 @@ Currently there is a limitation of loading templates from filesystem which is cu
 
 Another limitation is storage of rendered templates where templates are currently stored on the filesystem of a container which is non-persistent. The better way would be to store them remotely or send to storage service that will handle concurrency and storage to s3 or some other persistent storage.
 
+Also, related to previous point, the service is not scalable due to generated files being stored within a single pod where if we create 2+ replicas, each pod will have its own generated file which is not sharable between workfloads.
+
 The failure scenario is that currently resources are created for any user, which is creates security issues and unmanageable structure for each user because everyone will fight over each other resources and mess with them.
 
 Also, I would personally not create resources as tf files but create json file that describes each resource, same way as cdktf does that allows to apply resources easier programmatically.
