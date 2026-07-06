@@ -4,6 +4,18 @@ CLUSTER := tripla
 NAMESPACE_APP := terraform-parse-service
 NAMESPACE_MON := monitoring
 
+# Pinned chart versions
+CHART_TEMPO    := oci://ghcr.io/grafana-community/helm-charts/tempo
+CHART_LOKI     := oci://ghcr.io/grafana-community/helm-charts/loki
+CHART_GRAFANA  := oci://ghcr.io/grafana-community/helm-charts/grafana
+CHART_ALLOY    := grafana/alloy
+CHART_PROM     := oci://ghcr.io/prometheus-community/charts/prometheus
+VERSION_TEMPO   := 2.2.3
+VERSION_LOKI    := 18.4.0
+VERSION_GRAFANA := 12.7.2
+VERSION_ALLOY   := 1.9.0
+VERSION_PROM    := 29.14.0
+
 .PHONY: cluster-up cluster-down \
         image-build image-load \
         istio-install istio-patch \
@@ -59,19 +71,20 @@ metrics-server:
 
 obs-repos:
 	helm repo add grafana https://grafana.github.io/helm-charts
-	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 	helm repo update
 
 obs-tempo:
-	helm upgrade --install tempo grafana/tempo \
+	helm upgrade --install tempo $(CHART_TEMPO) \
+	  --version $(VERSION_TEMPO) \
 	  --namespace $(NAMESPACE_MON) --create-namespace \
 	  --set tempo.storage.trace.backend=local \
 	  --set tempo.storage.trace.local.path=/var/tempo/traces \
 	  --set persistence.enabled=false
-	kubectl rollout status deployment/tempo -n $(NAMESPACE_MON)
+	kubectl rollout status statefulset/tempo -n $(NAMESPACE_MON)
 
 obs-loki:
-	helm upgrade --install loki grafana/loki \
+	helm upgrade --install loki $(CHART_LOKI) \
+	  --version $(VERSION_LOKI) \
 	  --namespace $(NAMESPACE_MON) \
 	  --set deploymentMode=SingleBinary \
 	  --set loki.auth_enabled=false \
@@ -81,6 +94,8 @@ obs-loki:
 	  --set read.replicas=0 \
 	  --set write.replicas=0 \
 	  --set backend.replicas=0 \
+	  --set chunksCache.enabled=false \
+	  --set resultsCache.enabled=false \
 	  --set 'loki.schemaConfig.configs[0].from=2024-01-01' \
 	  --set 'loki.schemaConfig.configs[0].store=tsdb' \
 	  --set 'loki.schemaConfig.configs[0].object_store=filesystem' \
@@ -90,7 +105,8 @@ obs-loki:
 	kubectl rollout status statefulset/loki -n $(NAMESPACE_MON)
 
 obs-prometheus:
-	helm upgrade --install prometheus prometheus-community/prometheus \
+	helm upgrade --install prometheus $(CHART_PROM) \
+	  --version $(VERSION_PROM) \
 	  --namespace $(NAMESPACE_MON) \
 	  --set server.persistentVolume.enabled=false \
 	  --set alertmanager.enabled=false \
@@ -99,13 +115,15 @@ obs-prometheus:
 	kubectl rollout status deployment/prometheus-server -n $(NAMESPACE_MON)
 
 obs-alloy:
-	helm upgrade --install alloy grafana/alloy \
+	helm upgrade --install alloy $(CHART_ALLOY) \
+	  --version $(VERSION_ALLOY) \
 	  --namespace $(NAMESPACE_MON) \
 	  -f deploy/alloy-values.yaml
 	kubectl rollout status daemonset/alloy -n $(NAMESPACE_MON)
 
 obs-grafana:
-	helm upgrade --install grafana grafana/grafana \
+	helm upgrade --install grafana $(CHART_GRAFANA) \
+	  --version $(VERSION_GRAFANA) \
 	  --namespace $(NAMESPACE_MON) \
 	  -f deploy/grafana-values.yaml
 	kubectl rollout status deployment/grafana -n $(NAMESPACE_MON)

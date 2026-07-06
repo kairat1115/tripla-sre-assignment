@@ -159,7 +159,7 @@ helm upgrade --install tempo grafana/tempo \
   --set tempo.storage.trace.backend=local \
   --set tempo.storage.trace.local.path=/var/tempo/traces \
   --set persistence.enabled=false
-kubectl rollout status deployment/tempo -n monitoring
+kubectl rollout status statefulset/tempo -n monitoring
 ```
 
 **Loki** (log backend — single-binary, filesystem storage):
@@ -171,7 +171,10 @@ helm upgrade --install loki grafana/loki \
   --set loki.commonConfig.replication_factor=1 \
   --set loki.storage.type=filesystem \
   --set singleBinary.replicas=1 \
-  --set read.replicas=0 --set write.replicas=0 --set backend.replicas=0 \
+  --set read.replicas=0 \
+  --set write.replicas=0 \
+  --set backend.replicas=0 \
+  --set chunksCache.enabled=false \
   --set 'loki.schemaConfig.configs[0].from=2024-01-01' \
   --set 'loki.schemaConfig.configs[0].store=tsdb' \
   --set 'loki.schemaConfig.configs[0].object_store=filesystem' \
