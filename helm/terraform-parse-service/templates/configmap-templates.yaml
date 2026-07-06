@@ -1,5 +1,7 @@
 {{- range .Values.tfTemplates }}
 {{- $slug := printf "%s-tmpl" (. | replace "/" "-" | replace "." "-") }}
+{{- $dir := . | dir }}
+{{- $file := . | base }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -8,7 +10,9 @@ metadata:
   labels:
     {{- include "app.labels" $ | nindent 4 }}
     terraform-parse-service/template: "true"
+  annotations:
+    k8s-sidecar-target-directory: "/templates/{{ $dir }}"
 data:
-  {{ . }}: |
+  {{ $file }}: |
     {{- $.Files.Get (printf "files/templates/%s" .) | nindent 4 }}
 {{- end }}

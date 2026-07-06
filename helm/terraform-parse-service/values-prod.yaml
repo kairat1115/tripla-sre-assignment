@@ -1,5 +1,6 @@
 app:
-  replicaCount: 2
+  replicaCount: 1
+  # replicaCount: 2
   serviceAccount:
     create: true
   automountServiceAccountToken: true
@@ -14,11 +15,13 @@ app:
       cpu: "1000m"
       memory: "512Mi"
   hpa:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 6
-    targetCPUUtilizationPercentage: 50
-    targetMemoryUtilizationPercentage: 80
+    enabled: false
+    # NOTE: because application does not support scaling with replicas, disable them
+    # enabled: true
+    # minReplicas: 2
+    # maxReplicas: 6
+    # targetCPUUtilizationPercentage: 50
+    # targetMemoryUtilizationPercentage: 80
   configMaps:
     - name: config
       data:
