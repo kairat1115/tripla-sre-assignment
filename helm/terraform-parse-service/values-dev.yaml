@@ -10,6 +10,8 @@ app:
       data:
         config.yaml:
           listen_addr: ":8080"
+          environment: "dev"
+          version: "dev"
           logger:
             level: "debug"
             metadata:
@@ -24,8 +26,8 @@ app:
             addr: ":9091"
           providers:
             aws:
-              templates_dir: "./templates/aws"
-              storage_dir: "./output/aws"
+              templates_dir: "/templates/aws"
+              storage_dir: "/output/aws"
 
 gateway:
   istio:

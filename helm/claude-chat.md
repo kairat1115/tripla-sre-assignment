@@ -37,3 +37,7 @@ implement it all. when you’re done with a task or phase, mark it as completed 
 # add readme
 
 add readme how to use in general, for app and gateway each own readme and for terraform-parse-service add readme as well how to use
+
+# adjust config with latest changes
+
+re-read ..//terraform_parse_service/deploy/config.yaml and docker-compose.yaml. i have made changes to config
