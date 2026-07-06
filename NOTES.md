@@ -77,6 +77,30 @@ Explain the problems you encountered with the chart, how you addressed them, and
 
 ## Response
 
+The original code in helm directory was not scalable and blended 2 services backend and frontend within a single deliverable artifact which is not required for every service but may be a good use-case for a specific chart that only the service requires.
+
+Charts contained buggy code such as `\` in the start of the file making template malfunction. Templates were not using any values thus values.yaml did absolutely nothing and chart was in fact static manifests definitions.
+
+I have decided to create generic `app` chart that can handle both and potentilly majority of workloads. It is quite flexible and mostly uses kubernetes specs as-is with template injection ability.
+
+Along `app` chart, I have added `gateway` chart with Istio support to enable service mesh and ingress capabilities.
+
+For the terraform service, I have created separate chart and dependencies of `app` and `gateway`. The separate chart is required because we have been creating terraform templates as configmaps with the ability to get content from filesystem and is not possible to delegate such ability to subchart due to helm restrictions.
+
+To validate changes I have used standardazed testing suite `ct` and `helm unittests` which allows to verify chart healthiness.
+
+Total cost of refactoring the helm code:
+
+Session was lost 2 times, cost of lost sessions ~20$?
+
+Latest fetch was
+  Total cost:            $3.76
+  Total duration (API):  10m 49s
+  Total duration (wall): 19m 58s
+  Total code changes:    974 lines added, 124 lines removed
+  Usage by model:
+     claude-sonnet-4-6:  184 input, 39.3k output, 8.4m cache read, 171.8k cache write ($3.76)
+
 # Part 4 (System Behavior)
 ## Request
 Share your thoughts on how this setup might behave under load or in failure scenarios, and what strategies could make it more resilient in the long term.
