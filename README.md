@@ -112,13 +112,15 @@ kubectl patch svc istio-ingressgateway -n istio-system \
   --type=json \
   -p '[
     {"op":"replace","path":"/spec/type","value":"NodePort"},
-    {"op":"add","path":"/spec/ports/0/nodePort","value":30080}
+    {"op":"replace","path":"/spec/ports/1/nodePort","value":30080}
   ]'
 ```
 
 > If the patch conflicts with an existing nodePort assignment, inspect first:
 > `kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.spec.ports}'`
 > Then patch only the HTTP (port 80) entry.
+
+> **After every cluster restart**, the IngressGateway NodePort assignment resets. Re-run `make istio-patch` before testing. If requests return 404 from Envoy, this is the first thing to check.
 
 Create namespace and enable Istio sidecar injection:
 

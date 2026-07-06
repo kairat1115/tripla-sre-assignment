@@ -54,7 +54,7 @@ istio-install:
 istio-patch:
 	kubectl patch svc istio-ingressgateway -n istio-system \
 	  --type=json \
-	  -p '[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"add","path":"/spec/ports/0/nodePort","value":30080}]'
+	  -p '[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"replace","path":"/spec/ports/1/nodePort","value":30080}]'
 	kubectl create namespace $(NAMESPACE_APP) --dry-run=client -o yaml | kubectl apply -f -
 	kubectl label namespace $(NAMESPACE_APP) istio-injection=enabled --overwrite
 

@@ -72,7 +72,7 @@ kubectl patch svc istio-ingressgateway -n istio-system \
   --type=json \
   -p '[
     {"op":"replace","path":"/spec/type","value":"NodePort"},
-    {"op":"add","path":"/spec/ports/0/nodePort","value":30080}
+    {"op":"replace","path":"/spec/ports/1/nodePort","value":30080}
   ]'
 ```
 
@@ -131,7 +131,7 @@ helm upgrade --install tempo grafana/tempo \
   --set tempo.storage.trace.backend=local \
   --set tempo.storage.trace.local.path=/var/tempo/traces \
   --set persistence.enabled=false
-kubectl rollout status deployment/tempo -n monitoring
+kubectl rollout status statefulset/tempo -n monitoring
 ```
 
 Service DNS: `tempo.monitoring.svc.cluster.local`
