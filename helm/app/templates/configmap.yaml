@@ -1,0 +1,14 @@
+{{- range .Values.configMaps }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "app.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+data:
+  {{- range $key, $val := .data }}
+  {{ $key }}: |
+    {{- tpl ($val | toYaml) $ | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,139 @@
+app:
+  replicaCount: 1
+
+  image:
+    repository: terraform-parse-service
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+  env:
+    - name: APP_ENV
+      value: "production"
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  extraPorts:
+    - name: metrics
+      containerPort: 9091
+      protocol: TCP
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9091"
+    prometheus.io/path: "/metrics"
+
+  extraVolumes:
+    - name: app-config
+      configMap:
+        name: '{{ include "app.fullname" . }}-config'
+    - name: templates
+      emptyDir: {}
+    - name: output
+      emptyDir: {}
+
+  extraVolumeMounts:
+    - name: app-config
+      mountPath: /configs
+      readOnly: true
+    - name: templates
+      mountPath: /templates
+    - name: output
+      mountPath: /output
+
+  sidecars:
+    - name: k8s-sidecar
+      image: kiwigrid/k8s-sidecar:1.27.5
+      env:
+        - name: LABEL
+          value: "terraform-parse-service/template"
+        - name: LABEL_VALUE
+          value: "true"
+        - name: FOLDER
+          value: "/templates"
+        - name: RESOURCE
+          value: "configmap"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      volumeMounts:
+        - name: templates
+          mountPath: /templates
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+
+  probes:
+    type: tcpSocket
+    readiness:
+      port: 8080
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    liveness:
+      port: 8080
+      initialDelaySeconds: 10
+      periodSeconds: 20
+
+  hpa:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 60
+    targetMemoryUtilizationPercentage: 0
+
+  configMaps:
+    - name: config
+      data:
+        config.yaml:
+          listen_addr: ":8080"
+          logger:
+            level: "info"
+            metadata:
+              service: "terraform-parse-service"
+              env: "${APP_ENV}"
+          tracing:
+            exporter: "stdout"
+            endpoint: "localhost:4317"
+            insecure: false
+            sample_ratio: 1.0
+          metrics:
+            addr: ":9091"
+          providers:
+            aws:
+              templates_dir: "./templates/aws"
+              storage_dir: "./output/aws"
+
+gateway:
+  istio:
+    enabled: true
+    gateway:
+      create: true
+      port: 80
+      hosts:
+        - "terraform-parse-service.example.com"
+    virtualService:
+      enabled: true
+      hosts:
+        - "terraform-parse-service.example.com"
+      routes:
+        - match:
+            - headers:
+                release:
+                  exact: '{{ .Release.Name }}'
+          route:
+            - destination:
+                host: '{{ .Release.Name }}'
+                port:
+                  number: 8080
+    destinationRule:
+      enabled: false
+
+tfTemplates:
+  - aws/s3/bucket.tf.tmpl

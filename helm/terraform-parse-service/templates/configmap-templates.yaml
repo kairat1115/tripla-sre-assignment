@@ -1,0 +1,14 @@
+{{- range .Values.tfTemplates }}
+{{- $slug := printf "%s-tmpl" (. | replace "/" "-" | replace "." "-") }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "app.fullname" $ }}-{{ $slug }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+    terraform-parse-service/template: "true"
+data:
+  {{ . }}: |
+    {{- $.Files.Get (printf "files/templates/%s" .) | nindent 4 }}
+{{- end }}

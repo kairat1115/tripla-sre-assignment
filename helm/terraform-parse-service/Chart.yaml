@@ -1,0 +1,13 @@
+apiVersion: v2
+name: terraform-parse-service
+description: Terraform HCL generation service
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: app
+    version: "0.1.0"
+    repository: "file://../app"
+  - name: gateway
+    version: "0.1.0"
+    repository: "file://../gateway"

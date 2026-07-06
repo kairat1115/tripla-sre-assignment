@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "app.selectorLabels" . | nindent 8 }}
+      {{- if or .Values.podAnnotations .Values.configMaps }}
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- range .Values.configMaps }}
+        checksum/{{ .name }}: {{ tpl (.data | toYaml) $ | sha256sum }}
+        {{- end }}
+      {{- end }}
+    spec:
+      {{- if .Values.extraVolumes }}
+      volumes:
+        {{- tpl (toYaml .Values.extraVolumes) . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.args }}
+          args:
+            {{- toYaml .Values.args | nindent 12 }}
+          {{- end }}
+          {{- if .Values.env }}
+          env:
+            {{- tpl (toYaml .Values.env) . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            {{- if .Values.extraPorts }}
+            {{- toYaml .Values.extraPorts | nindent 12 }}
+            {{- end }}
+          {{- if .Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- tpl (toYaml .Values.extraVolumeMounts) . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            {{- if eq .Values.probes.type "tcpSocket" }}
+            tcpSocket:
+              port: {{ .Values.probes.readiness.port }}
+            {{- else }}
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: {{ .Values.probes.readiness.port }}
+            {{- end }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          livenessProbe:
+            {{- if eq .Values.probes.type "tcpSocket" }}
+            tcpSocket:
+              port: {{ .Values.probes.liveness.port }}
+            {{- else }}
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: {{ .Values.probes.liveness.port }}
+            {{- end }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        {{- if .Values.sidecars }}
+        {{- tpl (toYaml .Values.sidecars) . | nindent 8 }}
+        {{- end }}

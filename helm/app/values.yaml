@@ -1,0 +1,57 @@
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+args: []
+
+env: []
+
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+extraPorts: []
+
+extraVolumes: []
+
+extraVolumeMounts: []
+
+configMaps: []
+
+sidecars: []
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "250m"
+    memory: "256Mi"
+
+probes:
+  type: httpGet
+  readiness:
+    path: /
+    port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    path: /
+    port: 80
+    initialDelaySeconds: 15
+    periodSeconds: 20
+
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 0

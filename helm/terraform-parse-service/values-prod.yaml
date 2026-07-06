@@ -1,0 +1,51 @@
+app:
+  replicaCount: 2
+  env:
+    - name: APP_ENV
+      value: "production"
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "512Mi"
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 50
+    targetMemoryUtilizationPercentage: 80
+  configMaps:
+    - name: config
+      data:
+        config.yaml:
+          listen_addr: ":8080"
+          logger:
+            level: "info"
+            metadata:
+              service: "terraform-parse-service"
+              env: "production"
+          tracing:
+            exporter: "otlp_grpc"
+            endpoint: "tempo.monitoring.svc.cluster.local:4317"
+            insecure: false
+            sample_ratio: 0.1
+          metrics:
+            addr: ":9091"
+          providers:
+            aws:
+              templates_dir: "./templates/aws"
+              storage_dir: "./output/aws"
+
+gateway:
+  istio:
+    virtualService:
+      hosts:
+        - "terraform-parse-service.example.com"
+    destinationRule:
+      enabled: true
+      host: '{{ .Release.Name }}'
+
+tfTemplates:
+  - aws/s3/bucket.tf.tmpl

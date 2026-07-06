@@ -1,0 +1,40 @@
+app:
+  replicaCount: 1
+  env:
+    - name: APP_ENV
+      value: "dev"
+  hpa:
+    enabled: false
+  configMaps:
+    - name: config
+      data:
+        config.yaml:
+          listen_addr: ":8080"
+          logger:
+            level: "debug"
+            metadata:
+              service: "terraform-parse-service"
+              env: "dev"
+          tracing:
+            exporter: "stdout"
+            endpoint: "localhost:4317"
+            insecure: false
+            sample_ratio: 1.0
+          metrics:
+            addr: ":9091"
+          providers:
+            aws:
+              templates_dir: "./templates/aws"
+              storage_dir: "./output/aws"
+
+gateway:
+  istio:
+    gateway:
+      hosts:
+        - "terraform-parse-service.dev.example.com"
+    virtualService:
+      hosts:
+        - "terraform-parse-service.dev.example.com"
+
+tfTemplates:
+  - aws/s3/bucket.tf.tmpl

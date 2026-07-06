@@ -1,0 +1,2 @@
+# Helm dependency tarballs — regenerated via `helm dep update`
+**/charts/*.tgz

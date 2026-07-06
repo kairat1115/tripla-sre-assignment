@@ -1,0 +1,14 @@
+{{- if and .Values.istio.enabled .Values.istio.destinationRule.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "gateway.fullname" . }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+spec:
+  host: {{ tpl (required "istio.destinationRule.host is required" .Values.istio.destinationRule.host) . }}
+  {{- if .Values.istio.destinationRule.trafficPolicy }}
+  trafficPolicy:
+    {{- toYaml .Values.istio.destinationRule.trafficPolicy | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,16 @@
+resource "aws_s3_bucket" "{{ .name }}" {
+  bucket = "{{ .bucket_name }}"
+
+  tags = {
+    Name        = "{{ .name }}"
+    Environment = "{{ .environment }}"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "{{ .name }}" {
+  bucket = aws_s3_bucket.{{ .name }}.id
+
+  versioning_configuration {
+    status = "{{ .versioning | default "Enabled" }}"
+  }
+}

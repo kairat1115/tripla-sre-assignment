@@ -1,0 +1,19 @@
+{{- if and .Values.istio.enabled .Values.istio.virtualService.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "gateway.fullname" . }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+spec:
+  hosts:
+    {{- toYaml .Values.istio.virtualService.hosts | nindent 4 }}
+  gateways:
+    {{- if .Values.istio.gateway.create }}
+    - {{ include "gateway.fullname" . }}
+    {{- else }}
+    - {{ required "istio.gateway.name is required when gateway.create is false" .Values.istio.gateway.name }}
+    {{- end }}
+  http:
+    {{- tpl (toYaml .Values.istio.virtualService.routes) . | nindent 4 }}
+{{- end }}

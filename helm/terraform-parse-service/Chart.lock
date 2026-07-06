@@ -1,0 +1,9 @@
+dependencies:
+- name: app
+  repository: file://../app
+  version: 0.1.0
+- name: gateway
+  repository: file://../gateway
+  version: 0.1.0
+digest: sha256:7fe6fc46cefa1419f90d47bfd6bd4379756512703684d8f227eb3e58aee15a9b
+generated: "2026-07-06T14:09:16.091419+09:00"
