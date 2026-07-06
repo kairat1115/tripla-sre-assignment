@@ -1,16 +1,25 @@
-resource "aws_s3_bucket" "{{ .name }}" {
-  bucket = "{{ .bucket_name }}"
-
-  tags = {
-    Name        = "{{ .name }}"
-    Environment = "{{ .environment }}"
+{{- $region  := index .Properties "aws-region" -}}
+{{- $bucket  := index .Properties "bucket-name" -}}
+{{- $acl     := index .Properties "acl" -}}
+{{- $resName := $bucket | replace "-" "_" -}}
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
   }
 }
 
-resource "aws_s3_bucket_versioning" "{{ .name }}" {
-  bucket = aws_s3_bucket.{{ .name }}.id
+provider "aws" {
+  region = {{ $region | quote }}
+}
 
-  versioning_configuration {
-    status = "{{ .versioning | default "Enabled" }}"
-  }
+resource "aws_s3_bucket" {{ $resName | quote }} {
+  bucket = {{ $bucket | quote }}
+}
+
+resource "aws_s3_bucket_acl" {{ printf "%s_acl" $resName | quote }} {
+  bucket = aws_s3_bucket.{{ $resName }}.id
+  acl    = {{ $acl | quote }}
 }
