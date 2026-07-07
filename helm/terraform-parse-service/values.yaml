@@ -71,15 +71,28 @@ app:
       memory: "256Mi"
 
   probes:
-    type: tcpSocket
+    type: httpGet
+    startup:
+      path: /health
+      port: 8080
+      initialDelaySeconds: 15
+      periodSeconds: 1
+      timeoutSeconds: 1
+      failureThreshold: 3
     readiness:
+      path: /health
       port: 8080
-      initialDelaySeconds: 5
-      periodSeconds: 10
+      initialDelaySeconds: 0
+      periodSeconds: 1
+      timeoutSeconds: 1
+      failureThreshold: 3
     liveness:
+      path: /health
       port: 8080
-      initialDelaySeconds: 10
-      periodSeconds: 20
+      initialDelaySeconds: 0
+      periodSeconds: 1
+      timeoutSeconds: 1
+      failureThreshold: 3
 
   hpa:
     enabled: false

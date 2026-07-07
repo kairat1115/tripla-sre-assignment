@@ -54,23 +54,29 @@ tests:
             name: output
             emptyDir: {}
 
-  - it: readinessProbe is tcpSocket on port 8080
+  - it: readinessProbe is httpGet on /health port 8080
     template: charts/app/templates/deployment.yaml
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
           value: 8080
       - isNull:
-          path: spec.template.spec.containers[0].readinessProbe.httpGet
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket
 
-  - it: livenessProbe is tcpSocket with no httpGet
+  - it: livenessProbe is httpGet on /health port 8080
     template: charts/app/templates/deployment.yaml
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
           value: 8080
       - isNull:
-          path: spec.template.spec.containers[0].livenessProbe.httpGet
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket
 
   - it: app-config volumeMount is readOnly at /configs
     template: charts/app/templates/deployment.yaml

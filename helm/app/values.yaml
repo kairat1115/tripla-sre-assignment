@@ -38,16 +38,21 @@ resources:
 
 probes:
   type: httpGet
+  startup: {}
   readiness:
     path: /
     port: 80
     initialDelaySeconds: 5
     periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
   liveness:
     path: /
     port: 80
     initialDelaySeconds: 15
     periodSeconds: 20
+    timeoutSeconds: 1
+    failureThreshold: 3
 
 hpa:
   enabled: false

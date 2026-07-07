@@ -54,6 +54,21 @@ spec:
           volumeMounts:
             {{- tpl (toYaml .Values.extraVolumeMounts) . | nindent 12 }}
           {{- end }}
+          {{- if .Values.probes.startup }}
+          startupProbe:
+            {{- if eq .Values.probes.type "tcpSocket" }}
+            tcpSocket:
+              port: {{ .Values.probes.startup.port }}
+            {{- else }}
+            httpGet:
+              path: {{ .Values.probes.startup.path }}
+              port: {{ .Values.probes.startup.port }}
+            {{- end }}
+            initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          {{- end }}
           readinessProbe:
             {{- if eq .Values.probes.type "tcpSocket" }}
             tcpSocket:
@@ -65,6 +80,8 @@ spec:
             {{- end }}
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
           livenessProbe:
             {{- if eq .Values.probes.type "tcpSocket" }}
             tcpSocket:
@@ -76,6 +93,8 @@ spec:
             {{- end }}
             initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
         {{- if .Values.sidecars }}
