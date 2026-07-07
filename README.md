@@ -166,7 +166,12 @@ helm upgrade --install tempo oci://ghcr.io/grafana-community/helm-charts/tempo \
   --namespace monitoring \
   --set tempo.storage.trace.backend=local \
   --set tempo.storage.trace.local.path=/var/tempo/traces \
-  --set persistence.enabled=false
+  --set persistence.enabled=false \
+  --set tempo.metricsGenerator.enabled=true \
+  --set tempo.metricsGenerator.remoteWriteUrl=http://prometheus-server.monitoring.svc.cluster.local/api/v1/write \
+  --set 'tempo.overrides.defaults.metrics_generator.processors[0]=service-graphs' \
+  --set 'tempo.overrides.defaults.metrics_generator.processors[1]=span-metrics' \
+  --set 'tempo.overrides.defaults.metrics_generator.processors[2]=local-blocks'
 kubectl rollout status statefulset/tempo -n monitoring
 ```
 
