@@ -13,7 +13,7 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/httpapi"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/render"
-	s3resource "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource/aws/s3"
+	awsresource "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource/aws"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/store"
 )
 
@@ -40,6 +40,6 @@ func newTestServer(t *testing.T) (*httptest.Server, string) {
 		m,
 	)
 	router := httpapi.NewRouter(m, zap.NewNop())
-	s3resource.NewBucketHandler(tfSvc).RegisterRoutes(router)
+	awsresource.NewRouter(tfSvc).RegisterRoutes(router)
 	return httptest.NewServer(router.Handler()), storageDir
 }

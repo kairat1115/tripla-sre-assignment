@@ -16,7 +16,7 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/httpapi"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/render"
-	s3resource "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource/aws/s3"
+	awsresource "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource/aws"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/store"
 )
 
@@ -48,7 +48,7 @@ func New(cfg config.Config, logger *zap.Logger) (*App, error) {
 
 	router := httpapi.NewRouter(m, logger)
 	router.Handle(http.MethodGet, "/health", httpapi.NewHealthHandler(renderer, logger))
-	s3resource.NewBucketHandler(renderer).RegisterRoutes(router)
+	awsresource.NewRouter(renderer).RegisterRoutes(router)
 
 	return &App{
 		apiServer: &http.Server{

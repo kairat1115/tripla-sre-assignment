@@ -1,5 +1,5 @@
-// Package s3 implements the AWS S3 bucket API and Terraform mapping.
-package s3
+// Package bucket implements the AWS S3 bucket API and Terraform mapping.
+package bucket
 
 import (
 	"errors"
@@ -10,29 +10,29 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource"
 )
 
-// BucketHandler serves CRUD endpoints for generated AWS S3 bucket Terraform.
-type BucketHandler struct {
+// Router serves CRUD endpoints for generated AWS S3 bucket Terraform.
+type Router struct {
 	svc resource.Terraform
 }
 
-// NewBucketHandler creates an S3 bucket handler backed by a Terraform renderer.
-func NewBucketHandler(svc resource.Terraform) *BucketHandler {
-	return &BucketHandler{svc: svc}
+// NewRouter creates an S3 bucket router backed by a Terraform renderer.
+func NewRouter(svc resource.Terraform) *Router {
+	return &Router{svc: svc}
 }
 
 // RegisterRoutes registers all S3 bucket routes on r.
-func (h *BucketHandler) RegisterRoutes(r resource.Router) {
-	r.Handle(http.MethodGet, "/api/aws/v1/s3/buckets", h.List())
-	r.Handle(http.MethodPost, "/api/aws/v1/s3/buckets", h.Create())
-	r.Handle(http.MethodGet, "/api/aws/v1/s3/buckets/{bucket_name}", h.Get())
-	r.Handle(http.MethodPut, "/api/aws/v1/s3/buckets/{bucket_name}", h.Update())
-	r.Handle(http.MethodDelete, "/api/aws/v1/s3/buckets/{bucket_name}", h.Delete())
+func (rt *Router) RegisterRoutes(r resource.Router) {
+	r.Handle(http.MethodGet, "/api/aws/v1/s3/buckets", rt.List())
+	r.Handle(http.MethodPost, "/api/aws/v1/s3/buckets", rt.Create())
+	r.Handle(http.MethodGet, "/api/aws/v1/s3/buckets/{bucket_name}", rt.Get())
+	r.Handle(http.MethodPut, "/api/aws/v1/s3/buckets/{bucket_name}", rt.Update())
+	r.Handle(http.MethodDelete, "/api/aws/v1/s3/buckets/{bucket_name}", rt.Delete())
 }
 
 // Create handles POST /api/aws/v1/s3/buckets.
-func (h *BucketHandler) Create() http.HandlerFunc {
+func (rt *Router) Create() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req BucketRequest
+		var req Request
 		if err := httpapi.DecodeJSON(r, &req); err != nil {
 			httpapi.Error(w, http.StatusBadRequest, "invalid JSON")
 			return
@@ -42,19 +42,19 @@ func (h *BucketHandler) Create() http.HandlerFunc {
 			httpapi.Error(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		outputPath, err := h.svc.Generate(r.Context(), BucketGenerator{Props: props})
+		outputPath, err := rt.svc.Generate(r.Context(), Generator{Props: props})
 		if err != nil {
 			httpapi.Error(w, http.StatusInternalServerError, "generation failed")
 			return
 		}
-		httpapi.JSON(w, http.StatusCreated, BucketResponse{OutputPath: outputPath})
+		httpapi.JSON(w, http.StatusCreated, Response{OutputPath: outputPath})
 	}
 }
 
 // List handles GET /api/aws/v1/s3/buckets.
-func (h *BucketHandler) List() http.HandlerFunc {
+func (rt *Router) List() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		buckets, err := h.svc.List(r.Context(), resourceLocator{provider: "aws", path: "s3/"})
+		buckets, err := rt.svc.List(r.Context(), resourceLocator{provider: "aws", path: "s3/"})
 		if err != nil {
 			httpapi.Error(w, http.StatusInternalServerError, "list failed")
 			return
@@ -64,14 +64,14 @@ func (h *BucketHandler) List() http.HandlerFunc {
 }
 
 // Get handles GET /api/aws/v1/s3/buckets/{bucket_name}.
-func (h *BucketHandler) Get() http.HandlerFunc {
+func (rt *Router) Get() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bucketName := r.PathValue("bucket_name")
-		if err := ValidateBucketName(bucketName); err != nil {
+		if err := ValidateName(bucketName); err != nil {
 			httpapi.Error(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		content, err := h.svc.Read(r.Context(), resourceLocator{provider: "aws", path: "s3/" + bucketName})
+		content, err := rt.svc.Read(r.Context(), resourceLocator{provider: "aws", path: "s3/" + bucketName})
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				httpapi.Error(w, http.StatusNotFound, "bucket not found")
@@ -87,10 +87,10 @@ func (h *BucketHandler) Get() http.HandlerFunc {
 }
 
 // Update handles PUT /api/aws/v1/s3/buckets/{bucket_name}.
-func (h *BucketHandler) Update() http.HandlerFunc {
+func (rt *Router) Update() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bucketName := r.PathValue("bucket_name")
-		var req BucketRequest
+		var req Request
 		if err := httpapi.DecodeJSON(r, &req); err != nil {
 			httpapi.Error(w, http.StatusBadRequest, "invalid JSON")
 			return
@@ -105,24 +105,24 @@ func (h *BucketHandler) Update() http.HandlerFunc {
 			httpapi.Error(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		outputPath, err := h.svc.Generate(r.Context(), BucketGenerator{Props: props})
+		outputPath, err := rt.svc.Generate(r.Context(), Generator{Props: props})
 		if err != nil {
 			httpapi.Error(w, http.StatusInternalServerError, "generation failed")
 			return
 		}
-		httpapi.JSON(w, http.StatusOK, BucketResponse{OutputPath: outputPath})
+		httpapi.JSON(w, http.StatusOK, Response{OutputPath: outputPath})
 	}
 }
 
 // Delete handles DELETE /api/aws/v1/s3/buckets/{bucket_name}.
-func (h *BucketHandler) Delete() http.HandlerFunc {
+func (rt *Router) Delete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bucketName := r.PathValue("bucket_name")
-		if err := ValidateBucketName(bucketName); err != nil {
+		if err := ValidateName(bucketName); err != nil {
 			httpapi.Error(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		if err := h.svc.Delete(r.Context(), resourceLocator{provider: "aws", path: "s3/" + bucketName}); err != nil {
+		if err := rt.svc.Delete(r.Context(), resourceLocator{provider: "aws", path: "s3/" + bucketName}); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError, "delete failed")
 			return
 		}
@@ -130,4 +130,4 @@ func (h *BucketHandler) Delete() http.HandlerFunc {
 	}
 }
 
-var _ resource.HTTPResource = (*BucketHandler)(nil)
+var _ resource.HTTPResource = (*Router)(nil)

@@ -16,7 +16,9 @@ The service is split by responsibility:
 | `internal/app` | Server wiring, route registration, metrics server, graceful shutdown |
 | `internal/httpapi` | Router wrapper, JSON responses, error normalization, HTTP metrics/tracing middleware |
 | `internal/resource` | Shared resource contracts for routing, locating, and rendering Terraform resources |
-| `internal/resource/aws/s3` | AWS S3 bucket validation, HTTP handlers, and Terraform template data |
+| `internal/resource/aws` | AWS provider router; registers AWS service routers |
+| `internal/resource/aws/s3` | AWS S3 service router; registers S3 resource routers |
+| `internal/resource/aws/s3/bucket` | S3 bucket validation, HTTP handlers, and Terraform template data |
 | `internal/render` | Template loading and rendering into provider-specific stores |
 | `internal/store` | Storage interface and filesystem implementation |
 

@@ -1,4 +1,4 @@
-package s3
+package bucket
 
 import (
 	"bytes"
@@ -43,12 +43,12 @@ func (s *stubTerraform) Delete(_ context.Context, _ resource.Locator) error {
 	return s.err
 }
 
-func TestBucketHandler_BadJSON(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{})
+func TestRouter_BadJSON(t *testing.T) {
+	rt := NewRouter(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString("{bad"))
 
-	h.Create()(rec, req)
+	rt.Create()(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", rec.Code)
@@ -60,51 +60,51 @@ func TestBucketHandler_BadJSON(t *testing.T) {
 	}
 }
 
-func TestBucketHandler_MissingProperty(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{})
+func TestRouter_MissingProperty(t *testing.T) {
+	rt := NewRouter(&stubTerraform{})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 
-	h.Create()(rec, req)
+	rt.Create()(rec, req)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("want 422, got %d", rec.Code)
 	}
 }
 
-func TestBucketHandler_GenerationError(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("render failed")})
+func TestRouter_GenerationError(t *testing.T) {
+	rt := NewRouter(&stubTerraform{err: fmt.Errorf("render failed")})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"my-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 
-	h.Create()(rec, req)
+	rt.Create()(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("want 500, got %d", rec.Code)
 	}
 }
 
-func TestBucketHandler_Success(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
+func TestRouter_Success(t *testing.T) {
+	rt := NewRouter(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"my-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 
-	h.Create()(rec, req)
+	rt.Create()(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d", rec.Code)
 	}
-	var resp BucketResponse
+	var resp Response
 	_ = json.NewDecoder(rec.Body).Decode(&resp)
 	if resp.OutputPath != "/out/s3/my-bucket/main.tf" {
 		t.Fatalf("unexpected output_path: %s", resp.OutputPath)
 	}
 }
 
-func TestBucketHandler_InvalidBucketName(t *testing.T) {
+func TestRouter_InvalidBucketName(t *testing.T) {
 	cases := []struct {
 		name       string
 		bucketName string
@@ -125,10 +125,10 @@ func TestBucketHandler_InvalidBucketName(t *testing.T) {
 				`{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":%q}}}`,
 				tc.bucketName,
 			)
-			h := NewBucketHandler(&stubTerraform{})
+			rt := NewRouter(&stubTerraform{})
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
-			h.Create()(rec, req)
+			rt.Create()(rec, req)
 			if rec.Code != http.StatusUnprocessableEntity {
 				t.Fatalf("%s: want 422, got %d", tc.name, rec.Code)
 			}
@@ -136,11 +136,11 @@ func TestBucketHandler_InvalidBucketName(t *testing.T) {
 	}
 }
 
-func TestBucketHandler_List_Empty(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{})
+func TestRouter_List_Empty(t *testing.T) {
+	rt := NewRouter(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets", nil)
-	h.List()(rec, req)
+	rt.List()(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
@@ -153,11 +153,11 @@ func TestBucketHandler_List_Empty(t *testing.T) {
 	}
 }
 
-func TestBucketHandler_List_WithBuckets(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{buckets: []string{"alpha", "beta"}})
+func TestRouter_List_WithBuckets(t *testing.T) {
+	rt := NewRouter(&stubTerraform{buckets: []string{"alpha", "beta"}})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets", nil)
-	h.List()(rec, req)
+	rt.List()(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
@@ -170,24 +170,24 @@ func TestBucketHandler_List_WithBuckets(t *testing.T) {
 	}
 }
 
-func TestBucketHandler_Get_NotFound(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("read %s: %w", "x", os.ErrNotExist)})
+func TestRouter_Get_NotFound(t *testing.T) {
+	rt := NewRouter(&stubTerraform{err: fmt.Errorf("read %s: %w", "x", os.ErrNotExist)})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets/my-bucket", nil)
 	req.SetPathValue("bucket_name", "my-bucket")
-	h.Get()(rec, req)
+	rt.Get()(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d", rec.Code)
 	}
 }
 
-func TestBucketHandler_Get_Success(t *testing.T) {
+func TestRouter_Get_Success(t *testing.T) {
 	want := []byte("resource \"aws_s3_bucket\" {}")
-	h := NewBucketHandler(&stubTerraform{content: want})
+	rt := NewRouter(&stubTerraform{content: want})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets/my-bucket", nil)
 	req.SetPathValue("bucket_name", "my-bucket")
-	h.Get()(rec, req)
+	rt.Get()(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
@@ -196,29 +196,29 @@ func TestBucketHandler_Get_Success(t *testing.T) {
 	}
 }
 
-func TestBucketHandler_Put_NameMismatch(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{})
+func TestRouter_Put_NameMismatch(t *testing.T) {
+	rt := NewRouter(&stubTerraform{})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"other-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/aws/v1/s3/buckets/my-bucket", bytes.NewBufferString(body))
 	req.SetPathValue("bucket_name", "my-bucket")
-	h.Update()(rec, req)
+	rt.Update()(rec, req)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("want 422, got %d", rec.Code)
 	}
 }
 
-func TestBucketHandler_Put_Success(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
+func TestRouter_Put_Success(t *testing.T) {
+	rt := NewRouter(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/aws/v1/s3/buckets/my-bucket", bytes.NewBufferString(body))
 	req.SetPathValue("bucket_name", "my-bucket")
-	h.Update()(rec, req)
+	rt.Update()(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
-	var resp BucketResponse
+	var resp Response
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -227,23 +227,23 @@ func TestBucketHandler_Put_Success(t *testing.T) {
 	}
 }
 
-func TestBucketHandler_Delete_InvalidName(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{})
+func TestRouter_Delete_InvalidName(t *testing.T) {
+	rt := NewRouter(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/aws/v1/s3/buckets/AB", nil)
 	req.SetPathValue("bucket_name", "AB")
-	h.Delete()(rec, req)
+	rt.Delete()(rec, req)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("want 422, got %d", rec.Code)
 	}
 }
 
-func TestBucketHandler_Delete_Success(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{})
+func TestRouter_Delete_Success(t *testing.T) {
+	rt := NewRouter(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/aws/v1/s3/buckets/my-bucket", nil)
 	req.SetPathValue("bucket_name", "my-bucket")
-	h.Delete()(rec, req)
+	rt.Delete()(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("want 204, got %d", rec.Code)
 	}
