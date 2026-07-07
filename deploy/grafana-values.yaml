@@ -6,6 +6,22 @@ grafana.ini:
 persistence:
   enabled: false
 
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: terraform-parse-service
+        orgId: 1
+        folder: Terraform Parse Service
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/terraform-parse-service
+
+dashboardsConfigMaps:
+  terraform-parse-service: grafana-dashboard-terraform-parse-service
+
 datasources:
   datasources.yaml:
     apiVersion: 1
@@ -36,8 +52,7 @@ datasources:
         jsonData:
           derivedFields:
             - name: TraceID
-              matcherType: label
-              matcherRegex: trace_id
+              matcherRegex: '"trace_id":"([a-f0-9]+)"'
               url: "$${__value.raw}"
               datasourceUid: tempo
 

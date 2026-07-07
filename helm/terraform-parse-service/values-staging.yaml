@@ -7,25 +7,25 @@ app:
     - name: APP_ENV
       value: "staging"
   hpa:
-    enabled: true
-    minReplicas: 1
-    maxReplicas: 2
-    targetCPUUtilizationPercentage: 60
+    enabled: false
+    # NOTE: because application does not support scaling with replicas, disable them
+    # enabled: true
+    # minReplicas: 1
+    # maxReplicas: 2
+    # targetCPUUtilizationPercentage: 60
   configMaps:
     - name: config
       data:
         config.yaml:
           listen_addr: ":8080"
+          service_name: "terraform-parse-service"
           environment: "staging"
-          version: "staging"
+          version: '{{ .Values.image.tag }}'
           logger:
             level: "info"
-            metadata:
-              service: "terraform-parse-service"
-              env: "staging"
           tracing:
             exporter: "otlp_grpc"
-            endpoint: "tempo.monitoring.svc.cluster.local:4317"
+            endpoint: "alloy.monitoring.svc.cluster.local:4317"
             insecure: true
             sample_ratio: 0.5
           metrics:
@@ -44,4 +44,3 @@ gateway:
 
 tfTemplates:
   - aws/s3/bucket.tf.tmpl
-  - aws/s3/rds.tf.tmpl
