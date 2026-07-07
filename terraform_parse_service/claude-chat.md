@@ -248,3 +248,32 @@ implement it all. when you’re done with a task or phase, mark it as completed 
 
 1. in bucket go, do not call servePOST in post. move everything to Post function.
 2. lets rename Post to Create, Put to Update
+
+# Request to create plan9.md
+
+i dont like having
+func (s *TerraformService) ListBuckets(ctx context.Context, provider string) ([]string, error) {
+...
+}
+
+func (s *TerraformService) ReadBucket(ctx context.Context, provider, bucketName string) ([]byte, error) {
+...
+}
+
+func (s *TerraformService) DeleteBucket(ctx context.Context, provider, bucketName string) error {
+...
+}
+
+in terraform service. this is not maintainable. we need to fix that or make generic. write a detailed plan9.md document outlining how to implement this. include code snippets
+
+---
+
+some remarks and edits to plan, and ask clause with the following - I added a few notes to the document, address all the notes and update the document accordingly. don’t implement yet
+
+---
+
+add a detailed todo list to the plan, with all the phases and individual tasks necessary to complete the plan - don’t implement yet
+
+---
+
+implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.

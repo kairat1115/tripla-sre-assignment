@@ -25,11 +25,15 @@ type stubTerraform struct {
 	content []byte
 }
 
-func (s *stubTerraform) Generate(_ service.Generator) (string, error) {
+func (s *stubTerraform) Generate(_ context.Context, _ service.Generator) (string, error) {
 	return s.path, s.err
 }
 
-func (s *stubTerraform) ListBuckets(_ context.Context, _ string) ([]string, error) {
+func (s *stubTerraform) Read(_ context.Context, _ service.Locator) ([]byte, error) {
+	return s.content, s.err
+}
+
+func (s *stubTerraform) List(_ context.Context, _ service.Locator) ([]string, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -39,11 +43,7 @@ func (s *stubTerraform) ListBuckets(_ context.Context, _ string) ([]string, erro
 	return s.buckets, nil
 }
 
-func (s *stubTerraform) ReadBucket(_ context.Context, _ string, _ string) ([]byte, error) {
-	return s.content, s.err
-}
-
-func (s *stubTerraform) DeleteBucket(_ context.Context, _ string, _ string) error {
+func (s *stubTerraform) Delete(_ context.Context, _ service.Locator) error {
 	return s.err
 }
 

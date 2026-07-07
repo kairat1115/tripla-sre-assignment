@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -22,12 +23,15 @@ import (
 
 const tracerName = "service.terraform"
 
-type Generator interface {
+type Locator interface {
 	Provider() string
-	TemplateName() string
 	StoragePath() string
+}
+
+type Generator interface {
+	Locator
+	TemplateName() string
 	TemplateData() any
-	Context() context.Context
 }
 
 type TerraformService struct {
@@ -63,11 +67,11 @@ func LoadTemplates(dir string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func (s *TerraformService) Generate(g Generator) (string, error) {
+func (s *TerraformService) Generate(ctx context.Context, g Generator) (string, error) {
 	start := time.Now()
 	resource := resourceLabel(g.TemplateName())
 
-	ctx, span := otel.Tracer(tracerName).Start(g.Context(), "service.generate",
+	ctx, span := otel.Tracer(tracerName).Start(ctx, "service.generate",
 		trace.WithAttributes(
 			attribute.String("template.name", g.TemplateName()),
 			attribute.String("provider", g.Provider()),
@@ -119,28 +123,28 @@ func (s *TerraformService) Generate(g Generator) (string, error) {
 	return path, nil
 }
 
-func (s *TerraformService) ListBuckets(ctx context.Context, provider string) ([]string, error) {
-	writer, ok := s.writers[provider]
+func (s *TerraformService) Read(ctx context.Context, l Locator) ([]byte, error) {
+	writer, ok := s.writers[l.Provider()]
 	if !ok {
-		return nil, fmt.Errorf("no writer registered for provider %s", provider)
+		return nil, fmt.Errorf("no writer registered for provider %s", l.Provider())
 	}
-	return writer.List(ctx, "s3")
+	return writer.Read(ctx, l.StoragePath())
 }
 
-func (s *TerraformService) ReadBucket(ctx context.Context, provider, bucketName string) ([]byte, error) {
-	writer, ok := s.writers[provider]
+func (s *TerraformService) List(ctx context.Context, l Locator) ([]string, error) {
+	writer, ok := s.writers[l.Provider()]
 	if !ok {
-		return nil, fmt.Errorf("no writer registered for provider %s", provider)
+		return nil, fmt.Errorf("no writer registered for provider %s", l.Provider())
 	}
-	return writer.Read(ctx, "s3/"+bucketName)
+	return writer.List(ctx, path.Dir(l.StoragePath()))
 }
 
-func (s *TerraformService) DeleteBucket(ctx context.Context, provider, bucketName string) error {
-	writer, ok := s.writers[provider]
+func (s *TerraformService) Delete(ctx context.Context, l Locator) error {
+	writer, ok := s.writers[l.Provider()]
 	if !ok {
-		return fmt.Errorf("no writer registered for provider %s", provider)
+		return fmt.Errorf("no writer registered for provider %s", l.Provider())
 	}
-	return writer.Delete(ctx, "s3/"+bucketName)
+	return writer.Delete(ctx, l.StoragePath())
 }
 
 func resourceLabel(templateName string) string {

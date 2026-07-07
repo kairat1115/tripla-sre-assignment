@@ -10,10 +10,10 @@ import (
 )
 
 type Terraform interface {
-	Generate(g service.Generator) (string, error)
-	ListBuckets(ctx context.Context, provider string) ([]string, error)
-	ReadBucket(ctx context.Context, provider, bucketName string) ([]byte, error)
-	DeleteBucket(ctx context.Context, provider, bucketName string) error
+	Generate(ctx context.Context, g service.Generator) (string, error)
+	Read(ctx context.Context, l service.Locator) ([]byte, error)
+	List(ctx context.Context, l service.Locator) ([]string, error)
+	Delete(ctx context.Context, l service.Locator) error
 }
 
 type Result struct {
