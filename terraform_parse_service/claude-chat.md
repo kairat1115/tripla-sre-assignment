@@ -277,3 +277,13 @@ add a detailed todo list to the plan, with all the phases and individual tasks n
 ---
 
 implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.
+
+# Fix local deploy issues
+
+look at ../deploy related values. in deploy/ folder update configuration.
+1. service_name is not loaded from service_name in logs [Image #1]
+2. drilldown traces not loading  [Image #2]
+3. drilldown metrics not loading  [Image #3]
+
+tempo displays traces though  [Image #4]
+and metrics also exists  [Image #5]

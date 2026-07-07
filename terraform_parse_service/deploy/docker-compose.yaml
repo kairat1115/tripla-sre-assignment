@@ -67,7 +67,7 @@ services:
       - obs
 
   grafana:
-    image: grafana/grafana:13.0.3-distroless-slim
+    image: grafana/grafana:13.0.3
     ports:
       - "3000:3000"
     environment:

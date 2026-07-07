@@ -70,6 +70,10 @@ loki.source.docker "server" {
 loki.process "server" {
   forward_to = [loki.write.default.receiver]
 
+  stage.label_drop {
+    values = ["service_name"]
+  }
+
   stage.json {
     expressions = {
       trace_id     = "trace_id",
