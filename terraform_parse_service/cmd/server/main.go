@@ -1,93 +1,57 @@
+// Command server starts the Terraform Parse Service HTTP server.
 package main
 
 import (
 	"context"
-	"net/http"
+	"errors"
 	"os"
-	"text/template"
+	"os/signal"
+	"syscall"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/app"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/handler"
-	s3handler "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/handler/aws/s3"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/logger"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/service"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/storage"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/tracing"
 )
 
 func main() {
 	bootstrap, _ := zap.NewProduction()
-	defer bootstrap.Sync()
+	defer func() { _ = bootstrap.Sync() }()
 
 	cfg, err := config.Load()
 	if err != nil {
-		bootstrap.Error("config load failed", zap.String("error", err.Error()))
+		bootstrap.Error("config load failed", zap.Error(err))
 		os.Exit(1)
 	}
 
-	l, err := logger.New(cfg)
+	log, err := logger.New(cfg)
 	if err != nil {
-		bootstrap.Error("logger init failed", zap.String("error", err.Error()))
+		bootstrap.Error("logger init failed", zap.Error(err))
 		os.Exit(1)
 	}
-	defer l.Sync()
-	zap.ReplaceGlobals(l)
+	defer func() { _ = log.Sync() }()
+	zap.ReplaceGlobals(log)
 
-	_, shutdown, err := tracing.New(context.Background(), cfg)
+	_, shutdownTracing, err := tracing.New(context.Background(), cfg)
 	if err != nil {
-		zap.L().Error("tracer init failed", zap.String("error", err.Error()))
+		log.Error("tracer init failed", zap.Error(err))
 		os.Exit(1)
 	}
-	defer func() { _ = shutdown(context.Background()) }()
+	defer func() { _ = shutdownTracing(context.Background()) }()
 
-	reg := prometheus.NewRegistry()
-	m := metrics.New(reg)
-	m.Serve(cfg.Metrics.Addr, zap.L())
-
-	writers := make(map[string]storage.Writer)
-	templates := make(map[string]*template.Template)
-	// Initialize provider dependencies before serving traffic so configuration,
-	// storage, and template failures surface during startup.
-	for provider, pcfg := range cfg.Providers {
-		w, err := storage.NewFSWriter(pcfg.StorageDir)
-		if err != nil {
-			zap.L().Error("storage init failed", zap.String("provider", provider), zap.String("error", err.Error()))
-			os.Exit(1)
-		}
-		tmpl, err := service.LoadTemplates(pcfg.TemplatesDir)
-		if err != nil {
-			zap.L().Error("template load failed", zap.String("provider", provider), zap.String("error", err.Error()))
-			os.Exit(1)
-		}
-		writers[provider] = w
-		templates[provider] = tmpl
+	application, err := app.New(cfg, log)
+	if err != nil {
+		log.Error("app init failed", zap.Error(err))
+		os.Exit(1)
 	}
 
-	tfSvc := service.NewTerraformService(writers, templates, m)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	mux := http.NewServeMux()
-	mux.Handle("GET /health", handler.NewHealthHandler(templates, l))
-	s3 := s3handler.NewBucketHandler(tfSvc, l, m)
-	mux.Handle("GET /api/aws/v1/s3/buckets", s3.List())
-	mux.Handle("POST /api/aws/v1/s3/buckets", s3.Create())
-	mux.Handle("GET /api/aws/v1/s3/buckets/{bucket_name}", s3.Get())
-	mux.Handle("PUT /api/aws/v1/s3/buckets/{bucket_name}", s3.Update())
-	mux.Handle("DELETE /api/aws/v1/s3/buckets/{bucket_name}", s3.Delete())
-
-	providerNames := make([]string, 0, len(cfg.Providers))
-	for p := range cfg.Providers {
-		providerNames = append(providerNames, p)
-	}
-	zap.L().Info("server starting",
-		zap.String("addr", cfg.ListenAddr),
-		zap.Strings("providers", providerNames),
-	)
-	if err := http.ListenAndServe(cfg.ListenAddr, handler.Middleware(mux)); err != nil {
-		zap.L().Error("server exited", zap.String("error", err.Error()))
+	if err := application.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		log.Error("server exited", zap.Error(err))
 		os.Exit(1)
 	}
 }

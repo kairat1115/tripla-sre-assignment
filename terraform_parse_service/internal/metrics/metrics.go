@@ -60,15 +60,21 @@ func New(reg *prometheus.Registry) *Metrics {
 // Serve starts a Prometheus scrape endpoint on addr. When addr is empty it
 // listens on :9091.
 func (m *Metrics) Serve(addr string, log *zap.Logger) {
+	server := m.Server(addr)
+	go func() {
+		log.Info("metrics server starting", zap.String("addr", server.Addr))
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("metrics server exited", zap.String("error", err.Error()))
+		}
+	}()
+}
+
+// Server returns an HTTP server exposing the Prometheus /metrics endpoint.
+func (m *Metrics) Server(addr string) *http.Server {
 	if addr == "" {
 		addr = ":9091"
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(m.reg, promhttp.HandlerOpts{}))
-	go func() {
-		log.Info("metrics server starting", zap.String("addr", addr))
-		if err := http.ListenAndServe(addr, mux); err != nil {
-			log.Error("metrics server exited", zap.String("error", err.Error()))
-		}
-	}()
+	return &http.Server{Addr: addr, Handler: mux}
 }

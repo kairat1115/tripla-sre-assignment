@@ -11,11 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
-
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/service"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource"
 )
 
 type stubTerraform struct {
@@ -25,15 +21,15 @@ type stubTerraform struct {
 	content []byte
 }
 
-func (s *stubTerraform) Generate(_ context.Context, _ service.Generator) (string, error) {
+func (s *stubTerraform) Generate(_ context.Context, _ resource.Generator) (string, error) {
 	return s.path, s.err
 }
 
-func (s *stubTerraform) Read(_ context.Context, _ service.Locator) ([]byte, error) {
+func (s *stubTerraform) Read(_ context.Context, _ resource.Locator) ([]byte, error) {
 	return s.content, s.err
 }
 
-func (s *stubTerraform) List(_ context.Context, _ service.Locator) ([]string, error) {
+func (s *stubTerraform) List(_ context.Context, _ resource.Locator) ([]string, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -43,16 +39,12 @@ func (s *stubTerraform) List(_ context.Context, _ service.Locator) ([]string, er
 	return s.buckets, nil
 }
 
-func (s *stubTerraform) Delete(_ context.Context, _ service.Locator) error {
+func (s *stubTerraform) Delete(_ context.Context, _ resource.Locator) error {
 	return s.err
 }
 
-func testMetrics() *metrics.Metrics {
-	return metrics.New(prometheus.NewRegistry())
-}
-
 func TestBucketHandler_BadJSON(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString("{bad"))
 
@@ -69,7 +61,7 @@ func TestBucketHandler_BadJSON(t *testing.T) {
 }
 
 func TestBucketHandler_MissingProperty(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
@@ -82,7 +74,7 @@ func TestBucketHandler_MissingProperty(t *testing.T) {
 }
 
 func TestBucketHandler_GenerationError(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("render failed")}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("render failed")})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"my-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
@@ -95,7 +87,7 @@ func TestBucketHandler_GenerationError(t *testing.T) {
 }
 
 func TestBucketHandler_Success(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{path: "/out/s3/my-bucket/main.tf"}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"my-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
@@ -105,7 +97,7 @@ func TestBucketHandler_Success(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d", rec.Code)
 	}
-	var resp bucketResponse
+	var resp BucketResponse
 	_ = json.NewDecoder(rec.Body).Decode(&resp)
 	if resp.OutputPath != "/out/s3/my-bucket/main.tf" {
 		t.Fatalf("unexpected output_path: %s", resp.OutputPath)
@@ -133,7 +125,7 @@ func TestBucketHandler_InvalidBucketName(t *testing.T) {
 				`{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":%q}}}`,
 				tc.bucketName,
 			)
-			h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+			h := NewBucketHandler(&stubTerraform{})
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 			h.Create()(rec, req)
@@ -145,7 +137,7 @@ func TestBucketHandler_InvalidBucketName(t *testing.T) {
 }
 
 func TestBucketHandler_List_Empty(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets", nil)
 	h.List()(rec, req)
@@ -162,7 +154,7 @@ func TestBucketHandler_List_Empty(t *testing.T) {
 }
 
 func TestBucketHandler_List_WithBuckets(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{buckets: []string{"alpha", "beta"}}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{buckets: []string{"alpha", "beta"}})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets", nil)
 	h.List()(rec, req)
@@ -179,7 +171,7 @@ func TestBucketHandler_List_WithBuckets(t *testing.T) {
 }
 
 func TestBucketHandler_Get_NotFound(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("read %s: %w", "x", os.ErrNotExist)}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("read %s: %w", "x", os.ErrNotExist)})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets/my-bucket", nil)
 	req.SetPathValue("bucket_name", "my-bucket")
@@ -191,7 +183,7 @@ func TestBucketHandler_Get_NotFound(t *testing.T) {
 
 func TestBucketHandler_Get_Success(t *testing.T) {
 	want := []byte("resource \"aws_s3_bucket\" {}")
-	h := NewBucketHandler(&stubTerraform{content: want}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{content: want})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets/my-bucket", nil)
 	req.SetPathValue("bucket_name", "my-bucket")
@@ -205,7 +197,7 @@ func TestBucketHandler_Get_Success(t *testing.T) {
 }
 
 func TestBucketHandler_Put_NameMismatch(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"other-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/aws/v1/s3/buckets/my-bucket", bytes.NewBufferString(body))
@@ -217,7 +209,7 @@ func TestBucketHandler_Put_NameMismatch(t *testing.T) {
 }
 
 func TestBucketHandler_Put_Success(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{path: "/out/s3/my-bucket/main.tf"}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/aws/v1/s3/buckets/my-bucket", bytes.NewBufferString(body))
@@ -226,7 +218,7 @@ func TestBucketHandler_Put_Success(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
-	var resp bucketResponse
+	var resp BucketResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -236,7 +228,7 @@ func TestBucketHandler_Put_Success(t *testing.T) {
 }
 
 func TestBucketHandler_Delete_InvalidName(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/aws/v1/s3/buckets/AB", nil)
 	req.SetPathValue("bucket_name", "AB")
@@ -247,7 +239,7 @@ func TestBucketHandler_Delete_InvalidName(t *testing.T) {
 }
 
 func TestBucketHandler_Delete_Success(t *testing.T) {
-	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	h := NewBucketHandler(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/aws/v1/s3/buckets/my-bucket", nil)
 	req.SetPathValue("bucket_name", "my-bucket")

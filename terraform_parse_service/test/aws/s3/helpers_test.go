@@ -1,7 +1,6 @@
 package s3_test
 
 import (
-	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"runtime"
@@ -11,11 +10,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/handler"
-	s3handler "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/handler/aws/s3"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/httpapi"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/service"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/storage"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/render"
+	s3resource "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource/aws/s3"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/store"
 )
 
 func moduleRoot() string {
@@ -26,26 +25,21 @@ func moduleRoot() string {
 func newTestServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
 	storageDir := t.TempDir()
-	writer, err := storage.NewFSWriter(storageDir)
+	st, err := store.NewFSStore(storageDir)
 	if err != nil {
-		t.Fatalf("storage init: %v", err)
+		t.Fatalf("store init: %v", err)
 	}
-	tmpl, err := service.LoadTemplates(filepath.Join(moduleRoot(), "templates", "aws"))
+	tmpl, err := render.LoadTemplates(filepath.Join(moduleRoot(), "templates", "aws"))
 	if err != nil {
 		t.Fatalf("template load: %v", err)
 	}
 	m := metrics.New(prometheus.NewRegistry())
-	tfSvc := service.NewTerraformService(
-		map[string]storage.Writer{"aws": writer},
+	tfSvc := render.New(
+		map[string]store.Store{"aws": st},
 		map[string]*template.Template{"aws": tmpl},
 		m,
 	)
-	mux := http.NewServeMux()
-	s3 := s3handler.NewBucketHandler(tfSvc, zap.NewNop(), m)
-	mux.Handle("GET /api/aws/v1/s3/buckets", s3.List())
-	mux.Handle("POST /api/aws/v1/s3/buckets", s3.Create())
-	mux.Handle("GET /api/aws/v1/s3/buckets/{bucket_name}", s3.Get())
-	mux.Handle("PUT /api/aws/v1/s3/buckets/{bucket_name}", s3.Update())
-	mux.Handle("DELETE /api/aws/v1/s3/buckets/{bucket_name}", s3.Delete())
-	return httptest.NewServer(handler.Middleware(mux)), storageDir
+	router := httpapi.NewRouter(m, zap.NewNop())
+	s3resource.NewBucketHandler(tfSvc).RegisterRoutes(router)
+	return httptest.NewServer(router.Handler()), storageDir
 }

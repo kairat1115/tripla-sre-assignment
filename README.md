@@ -378,10 +378,11 @@ kind delete cluster --name tripla
 
 ## Known issues
 
-**Templates not hot-reloaded.** `LoadTemplates()` runs once at startup. k8s-sidecar writes new templates to `/templates` but the service never re-reads the directory. Adding a template requires a pod restart:
-```bash
-kubectl rollout restart deployment/terraform-parse-service -n terraform-parse-service
-```
+**Templates are hot-reloaded by polling.** The service loads templates at
+startup, then polls each provider's `templates_dir` using
+`templates_poll_interval`. When a `.tmpl` file is added, removed, renamed, or
+changed, the provider's template set is reloaded without restarting the pod. If a
+reload fails, the last successfully loaded template set stays active.
 
 ---
 

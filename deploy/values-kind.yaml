@@ -22,4 +22,5 @@ app:
           providers:
             aws:
               templates_dir: "/templates/aws"
+              templates_poll_interval: "5s"
               storage_dir: "/output/aws"
