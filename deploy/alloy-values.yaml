@@ -1,6 +1,8 @@
 alloy:
   configMap:
     content: |
+      // ── Logs ────────────────────────────────────────────────────────────────
+
       discovery.kubernetes "app_pods" {
         role = "pod"
         namespaces {
@@ -12,8 +14,13 @@ alloy:
         targets = discovery.kubernetes.app_pods.targets
 
         rule {
-          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_instance"]
           regex         = "terraform-parse-service"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          regex         = "app"
           action        = "keep"
         }
         rule {
@@ -28,18 +35,9 @@ alloy:
           source_labels = ["__meta_kubernetes_pod_container_name"]
           target_label  = "container"
         }
-        rule {
-          source_labels = [
-            "__meta_kubernetes_pod_uid",
-            "__meta_kubernetes_pod_container_name",
-          ]
-          separator    = "/"
-          target_label = "__path__"
-          replacement  = "/var/log/pods/*$1/*.log"
-        }
       }
 
-      loki.source.file "app_logs" {
+      loki.source.kubernetes "app_logs" {
         targets    = discovery.relabel.app_pods.output
         forward_to = [loki.process.app.receiver]
       }
@@ -66,6 +64,79 @@ alloy:
           url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
         }
       }
+
+      // ── Metrics ─────────────────────────────────────────────────────────────
+      // Istio overwrites prometheus.io/* pod annotations with its own envoy stats.
+      // Scrape the app metrics port directly instead of relying on annotations.
+
+      discovery.kubernetes "app_metrics" {
+        role = "pod"
+        namespaces {
+          names = ["terraform-parse-service"]
+        }
+      }
+
+      discovery.relabel "app_metrics" {
+        targets = discovery.kubernetes.app_metrics.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_instance"]
+          regex         = "terraform-parse-service"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_ip"]
+          target_label  = "__address__"
+          replacement   = "$1:9091"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+      }
+
+      prometheus.scrape "app" {
+        targets         = discovery.relabel.app_metrics.output
+        forward_to      = [prometheus.remote_write.default.receiver]
+        scrape_interval = "15s"
+        metrics_path    = "/metrics"
+      }
+
+      prometheus.remote_write "default" {
+        endpoint {
+          url = "http://prometheus-server.monitoring.svc.cluster.local/api/v1/write"
+        }
+      }
+
+      // ── Traces ───────────────────────────────────────────────────────────────
+
+      otelcol.receiver.otlp "default" {
+        grpc {
+          endpoint = "0.0.0.0:4317"
+        }
+        output {
+          traces = [otelcol.exporter.otlp.tempo.input]
+        }
+      }
+
+      otelcol.exporter.otlp "tempo" {
+        client {
+          endpoint = "tempo.monitoring.svc.cluster.local:4317"
+          tls {
+            insecure = true
+          }
+        }
+      }
+
+  extraPorts:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
 
 controller:
   type: daemonset

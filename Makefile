@@ -13,7 +13,7 @@ CHART_PROM     := oci://ghcr.io/prometheus-community/charts/prometheus
 VERSION_TEMPO   := 2.2.3
 VERSION_LOKI    := 18.4.0
 VERSION_GRAFANA := 12.7.2
-VERSION_ALLOY   := 1.9.0
+VERSION_ALLOY   := 1.10.0
 VERSION_PROM    := 29.14.0
 
 .PHONY: cluster-up cluster-down \
@@ -111,7 +111,8 @@ obs-prometheus:
 	  --set server.persistentVolume.enabled=false \
 	  --set alertmanager.enabled=false \
 	  --set pushgateway.enabled=false \
-	  --set server.service.type=ClusterIP
+	  --set server.service.type=ClusterIP \
+	  --set 'server.extraFlags[0]=web.enable-remote-write-receiver'
 	kubectl rollout status deployment/prometheus-server -n $(NAMESPACE_MON)
 
 obs-alloy:

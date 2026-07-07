@@ -8,7 +8,7 @@ Assignment reference: https://github.com/umami-dev/interview/tree/main/terraform
 
 - `terraform_parse_service/` — Go service source
 - `helm/` — Helm charts (`app/`, `gateway/`, `terraform-parse-service/`)
-- `deploy/` — kind cluster config, Helm values overrides, RBAC, observability configs, automation scripts
+- `deploy/` — kind cluster config, Helm values overrides, observability configs, automation scripts
 
 ## Prerequisites
 
@@ -146,17 +146,17 @@ kubectl rollout status deployment/metrics-server -n kube-system
 
 ### Step 5: Observability stack
 
-All components in the `monitoring` namespace. Mirrors the docker-compose `obs` network.
+All components in the `monitoring` namespace. Charts use pinned OCI versions — no `helm repo add` needed for Tempo, Loki, Grafana, or Prometheus.
 
 ```bash
 helm repo add grafana https://grafana.github.io/helm-charts
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 ```
 
-**Tempo** (trace backend — OTLP gRPC :4317, HTTP query :3200):
+**Tempo** (`oci://ghcr.io/grafana-community/helm-charts/tempo:2.2.3` — OTLP gRPC :4317, HTTP query :3200):
 ```bash
-helm upgrade --install tempo grafana/tempo \
+helm upgrade --install tempo oci://ghcr.io/grafana-community/helm-charts/tempo \
+  --version 2.2.3 \
   --namespace monitoring --create-namespace \
   --set tempo.storage.trace.backend=local \
   --set tempo.storage.trace.local.path=/var/tempo/traces \
@@ -164,19 +164,19 @@ helm upgrade --install tempo grafana/tempo \
 kubectl rollout status statefulset/tempo -n monitoring
 ```
 
-**Loki** (log backend — single-binary, filesystem storage):
+**Loki** (`oci://ghcr.io/grafana-community/helm-charts/loki:18.4.0` — single-binary, filesystem storage, memcached caches disabled):
 ```bash
-helm upgrade --install loki grafana/loki \
+helm upgrade --install loki oci://ghcr.io/grafana-community/helm-charts/loki \
+  --version 18.4.0 \
   --namespace monitoring \
   --set deploymentMode=SingleBinary \
   --set loki.auth_enabled=false \
   --set loki.commonConfig.replication_factor=1 \
   --set loki.storage.type=filesystem \
   --set singleBinary.replicas=1 \
-  --set read.replicas=0 \
-  --set write.replicas=0 \
-  --set backend.replicas=0 \
+  --set read.replicas=0 --set write.replicas=0 --set backend.replicas=0 \
   --set chunksCache.enabled=false \
+  --set resultsCache.enabled=false \
   --set 'loki.schemaConfig.configs[0].from=2024-01-01' \
   --set 'loki.schemaConfig.configs[0].store=tsdb' \
   --set 'loki.schemaConfig.configs[0].object_store=filesystem' \
@@ -186,34 +186,42 @@ helm upgrade --install loki grafana/loki \
 kubectl rollout status statefulset/loki -n monitoring
 ```
 
-**Prometheus** (metrics backend — auto-discovers pods annotated `prometheus.io/scrape: "true"`):
+**Prometheus** (`oci://ghcr.io/prometheus-community/charts/prometheus:29.14.0` — remote-write receiver enabled for Alloy):
 ```bash
-helm upgrade --install prometheus prometheus-community/prometheus \
+helm upgrade --install prometheus oci://ghcr.io/prometheus-community/charts/prometheus \
+  --version 29.14.0 \
   --namespace monitoring \
   --set server.persistentVolume.enabled=false \
   --set alertmanager.enabled=false \
   --set pushgateway.enabled=false \
-  --set server.service.type=ClusterIP
+  --set server.service.type=ClusterIP \
+  --set 'server.extraFlags[0]=web.enable-remote-write-receiver'
 kubectl rollout status deployment/prometheus-server -n monitoring
 ```
 
-**Grafana Alloy** (log + metric collection — DaemonSet with k8s pod log discovery):
+> `--web.enable-remote-write-receiver` is required. Alloy uses `prometheus.remote_write` to push metrics — without this flag Prometheus returns 404 on every write.
 
-Config file: `deploy/alloy-values.yaml`. Uses Kubernetes pod discovery + file tailing from `/var/log/pods` — replaces the docker-compose Docker socket approach which does not work in k8s.
+**Grafana Alloy** (`grafana/alloy:1.10.0` — DaemonSet, OTLP gRPC receiver on :4317):
+
+Config file: `deploy/alloy-values.yaml`. Handles logs (`loki.source.kubernetes` API-based streaming), metrics (direct scrape of app pod :9091 — bypasses Istio annotation override), and traces (OTLP receiver → Tempo).
+
+> Istio sidecar injection overwrites `prometheus.io/*` pod annotations with Envoy stats. Alloy scrapes the app metrics port directly instead of relying on those annotations.
 
 ```bash
 helm upgrade --install alloy grafana/alloy \
+  --version 1.10.0 \
   --namespace monitoring \
   -f deploy/alloy-values.yaml
 kubectl rollout status daemonset/alloy -n monitoring
 ```
 
-**Grafana** (UI — anonymous admin, pre-provisioned datasources):
+**Grafana** (`oci://ghcr.io/grafana-community/helm-charts/grafana:12.7.2` — anonymous admin, pre-provisioned datasources):
 
-Config file: `deploy/grafana-values.yaml`. Datasources point at k8s cluster-local service FQDNs.
+Config file: `deploy/grafana-values.yaml`. Datasources point at cluster-local service FQDNs.
 
 ```bash
-helm upgrade --install grafana grafana/grafana \
+helm upgrade --install grafana oci://ghcr.io/grafana-community/helm-charts/grafana \
+  --version 12.7.2 \
   --namespace monitoring \
   -f deploy/grafana-values.yaml
 kubectl rollout status deployment/grafana -n monitoring
@@ -223,12 +231,14 @@ kubectl rollout status deployment/grafana -n monitoring
 
 File: `deploy/values-kind.yaml`
 
-Two prod settings must be overridden for kind:
+Key overrides for kind:
 
-1. `tracing.insecure: true` — Tempo in kind has no TLS cert; the Go service dials gRPC without TLS when this is `true`.
-2. `image.tag` — set to the SHA built in Step 2 (passed via `--set app.image.tag`).
+1. `image.repository` + `pullPolicy: IfNotPresent` — uses locally loaded image, no registry pull.
+2. `tracing.endpoint` — points to `alloy.monitoring.svc.cluster.local:4317` (base values default to `localhost:4317`).
+3. `tracing.insecure: true` — Tempo in kind has no TLS cert.
+4. `image.tag` — passed via `--set app.image.tag` at install time (SHA from Step 2).
 
-The `configMaps` block is an inline YAML struct that cannot be overridden via `--set`. `deploy/values-kind.yaml` replaces the entire block with the correct Tempo endpoint + `insecure: true`.
+The `configMaps` block is an inline YAML struct and cannot be overridden via `--set`. `deploy/values-kind.yaml` replaces the entire block with the correct values.
 
 ### Step 7: Install terraform-parse-service
 
@@ -262,7 +272,7 @@ kubectl exec -n terraform-parse-service \
 |----------|---------|
 | Deployment | 2 replicas, main + k8s-sidecar containers |
 | Service | ClusterIP, port 8080 + 9091 metrics |
-| HPA | min 2 / max 6, CPU 50% + memory 80% |
+| HPA | disabled in prod values (emptyDir output volume prevents safe multi-replica scaling) |
 | ConfigMap `*-config` | service config.yaml |
 | ConfigMap `*-aws-s3-bucket-tf-tmpl` | S3 bucket Terraform template |
 | Istio Gateway | `terraform-parse-service.example.com:80` |
@@ -331,7 +341,7 @@ kubectl port-forward svc/grafana 3000:80 -n monitoring
 **Traces (Tempo datasource):**
 - Search `service.name = terraform-parse-service`
 - Span tree per request: `http.request` → `service.generate` → storage write
-- 10% sampling in prod (`sample_ratio: 0.1`)
+- 100% sampling (`sample_ratio: 1.0`)
 
 **Logs (Loki datasource):**
 - Label filter: `{namespace="terraform-parse-service"}`
@@ -362,8 +372,6 @@ kind delete cluster --name tripla
 kubectl rollout restart deployment/terraform-parse-service -n terraform-parse-service
 ```
 
-**RDS template has no handler.** `rds.tf.tmpl` exists in `helm/terraform-parse-service/files/templates/aws/s3/` but no HTTP handler is registered. The template is unreachable through the API.
-
-**HPA warmup.** HPA shows `<unknown>` for CPU/memory for ~60s after deploy while metrics-server aggregates first data points.
+**RDS template has no handler.** `rds.tf.tmpl` exists at `helm/terraform-parse-service/files/templates/aws/s3/rds.tf.tmpl` (misplaced in the s3 subdirectory) and no HTTP handler is registered for it. Unreachable through the API.
 
 **No application-level health endpoint.** Probes use `tcpSocket` on port 8080 — confirms port open, not service ready. A failed `LoadTemplates()` after server start will pass the probe while the service returns 500s.

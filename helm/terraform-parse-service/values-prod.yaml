@@ -38,7 +38,7 @@ app:
             exporter: "otlp_grpc"
             endpoint: "tempo.monitoring.svc.cluster.local:4317"
             insecure: false
-            sample_ratio: 0.1
+            sample_ratio: 1.0
           metrics:
             addr: ":9091"
           providers:
