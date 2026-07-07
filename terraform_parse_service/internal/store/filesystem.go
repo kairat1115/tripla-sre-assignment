@@ -34,8 +34,12 @@ func NewFSStore(baseDir string) (*FSStore, error) {
 func (s *FSStore) Put(ctx context.Context, key string, content []byte) (string, error) {
 	_, span := otel.Tracer(tracerName).Start(ctx, "store.put",
 		trace.WithAttributes(
+			attribute.String("store.backend", "filesystem"),
+			attribute.String("store.operation", "put"),
 			attribute.String("store.key", key),
 			attribute.String("store.base_dir", s.BaseDir),
+			attribute.Int("store.content.bytes", len(content)),
+			attribute.Int("terraform.output.bytes", len(content)),
 		),
 	)
 	defer span.End()
@@ -44,16 +48,24 @@ func (s *FSStore) Put(ctx context.Context, key string, content []byte) (string, 
 	if err != nil {
 		return "", markStoreError(span, "err-store-path-traversal", err)
 	}
+	span.SetAttributes(attribute.String("store.path", dir))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", markStoreError(span, "err-store-mkdir", fmt.Errorf("mkdir %s: %w", dir, err))
 	}
 
 	path := filepath.Join(dir, "main.tf")
+	span.SetAttributes(attribute.String("terraform.provider.storage.output.path", path))
+	span.AddEvent("store.write.start",
+		trace.WithAttributes(
+			attribute.String("terraform.provider.storage.output.path", path),
+			attribute.Int("store.content.bytes", len(content)),
+		),
+	)
 	if err := writeFileReplace(path, content); err != nil {
 		return "", markStoreError(span, "err-store-write-file", fmt.Errorf("write %s: %w", path, err))
 	}
 	span.SetStatus(codes.Ok, "")
-	span.SetAttributes(attribute.String("output.path", path))
+	span.AddEvent("store.write.success", trace.WithAttributes(attribute.String("terraform.provider.storage.output.path", path)))
 	return path, nil
 }
 
@@ -61,6 +73,8 @@ func (s *FSStore) Put(ctx context.Context, key string, content []byte) (string, 
 func (s *FSStore) Get(ctx context.Context, key string) ([]byte, error) {
 	_, span := otel.Tracer(tracerName).Start(ctx, "store.get",
 		trace.WithAttributes(
+			attribute.String("store.backend", "filesystem"),
+			attribute.String("store.operation", "get"),
 			attribute.String("store.key", key),
 			attribute.String("store.base_dir", s.BaseDir),
 		),
@@ -72,11 +86,26 @@ func (s *FSStore) Get(ctx context.Context, key string) ([]byte, error) {
 		return nil, markStoreError(span, "err-store-path-traversal", err)
 	}
 	path := filepath.Join(dir, "main.tf")
+	span.SetAttributes(
+		attribute.String("store.path", dir),
+		attribute.String("terraform.provider.storage.output.path", path),
+	)
+	span.AddEvent("store.read.start", trace.WithAttributes(attribute.String("terraform.provider.storage.output.path", path)))
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, markStoreError(span, "err-store-read-file", fmt.Errorf("read %s: %w", path, err))
 	}
 	span.SetStatus(codes.Ok, "")
+	span.SetAttributes(
+		attribute.Int("store.output.bytes", len(content)),
+		attribute.Int("terraform.output.bytes", len(content)),
+	)
+	span.AddEvent("store.read.success",
+		trace.WithAttributes(
+			attribute.String("terraform.provider.storage.output.path", path),
+			attribute.Int("store.output.bytes", len(content)),
+		),
+	)
 	return content, nil
 }
 
@@ -84,6 +113,8 @@ func (s *FSStore) Get(ctx context.Context, key string) ([]byte, error) {
 func (s *FSStore) List(ctx context.Context, prefix string) ([]string, error) {
 	_, span := otel.Tracer(tracerName).Start(ctx, "store.list",
 		trace.WithAttributes(
+			attribute.String("store.backend", "filesystem"),
+			attribute.String("store.operation", "list"),
 			attribute.String("store.prefix", prefix),
 			attribute.String("store.base_dir", s.BaseDir),
 		),
@@ -94,10 +125,13 @@ func (s *FSStore) List(ctx context.Context, prefix string) ([]string, error) {
 	if err != nil {
 		return nil, markStoreError(span, "err-store-path-traversal", err)
 	}
+	span.SetAttributes(attribute.String("store.path", dir))
+	span.AddEvent("store.list.start", trace.WithAttributes(attribute.String("store.path", dir)))
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			span.SetStatus(codes.Ok, "")
+			span.SetAttributes(attribute.Int("store.entry_count", 0))
 			return []string{}, nil
 		}
 		return nil, markStoreError(span, "err-store-list-dir", fmt.Errorf("list %s: %w", dir, err))
@@ -109,7 +143,16 @@ func (s *FSStore) List(ctx context.Context, prefix string) ([]string, error) {
 		}
 	}
 	span.SetStatus(codes.Ok, "")
-	span.SetAttributes(attribute.Int("store.count", len(names)))
+	span.SetAttributes(
+		attribute.Int("store.count", len(names)),
+		attribute.Int("store.entry_count", len(names)),
+	)
+	span.AddEvent("store.list.success",
+		trace.WithAttributes(
+			attribute.String("store.path", dir),
+			attribute.Int("store.entry_count", len(names)),
+		),
+	)
 	return names, nil
 }
 
@@ -117,6 +160,8 @@ func (s *FSStore) List(ctx context.Context, prefix string) ([]string, error) {
 func (s *FSStore) Delete(ctx context.Context, key string) error {
 	_, span := otel.Tracer(tracerName).Start(ctx, "store.delete",
 		trace.WithAttributes(
+			attribute.String("store.backend", "filesystem"),
+			attribute.String("store.operation", "delete"),
 			attribute.String("store.key", key),
 			attribute.String("store.base_dir", s.BaseDir),
 		),
@@ -127,10 +172,13 @@ func (s *FSStore) Delete(ctx context.Context, key string) error {
 	if err != nil {
 		return markStoreError(span, "err-store-path-traversal", err)
 	}
+	span.SetAttributes(attribute.String("store.path", dir))
+	span.AddEvent("store.delete.start", trace.WithAttributes(attribute.String("store.path", dir)))
 	if err := os.RemoveAll(dir); err != nil {
 		return markStoreError(span, "err-store-delete", fmt.Errorf("delete %s: %w", dir, err))
 	}
 	span.SetStatus(codes.Ok, "")
+	span.AddEvent("store.delete.success", trace.WithAttributes(attribute.String("store.path", dir)))
 	return nil
 }
 
@@ -186,6 +234,7 @@ func markStoreError(span trace.Span, slug string, err error) error {
 	span.RecordError(err)
 	span.SetAttributes(
 		attribute.String("exception.slug", slug),
+		attribute.String("exception.message", err.Error()),
 		attribute.Bool("error", true),
 	)
 	return err

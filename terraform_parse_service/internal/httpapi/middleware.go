@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -53,6 +54,14 @@ func Instrument(m *metrics.Metrics, logger *zap.Logger, method, route string, ne
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		requestBytes := r.ContentLength
+		if requestBytes < 0 {
+			requestBytes = 0
+		}
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
 
 		m.HTTPInFlight.WithLabelValues(method, route).Inc()
 		defer func() {
@@ -61,32 +70,53 @@ func Instrument(m *metrics.Metrics, logger *zap.Logger, method, route string, ne
 			m.HTTPRequestsTotal.WithLabelValues(method, route, strconv.Itoa(rec.status)).Inc()
 		}()
 
-		ctx, span := otel.Tracer(tracerName).Start(r.Context(), "http.request",
+		parentCtx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		ctx, span := otel.Tracer(tracerName).Start(parentCtx, "http.request",
 			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(
 				attribute.String("http.request.method", method),
 				attribute.String("http.route", route),
+				attribute.String("url.scheme", scheme),
+				attribute.String("server.address", r.Host),
 				attribute.String("network.peer.address", r.RemoteAddr),
+				attribute.String("http.request.header.content_type", r.Header.Get("Content-Type")),
+				attribute.Int64("http.request.body.size", requestBytes),
 			),
 		)
 		defer span.End()
+		ctx = withTelemetry(ctx)
 
 		next.ServeHTTP(rec, r.WithContext(ctx))
 
+		duration := time.Since(start)
 		span.SetAttributes(attribute.Int("http.response.status_code", rec.status))
+		span.SetAttributes(attribute.Int64("http.response.body.size", rec.bytesWritten))
 		if rec.status >= 500 {
 			span.SetStatus(codes.Error, http.StatusText(rec.status))
+			span.SetAttributes(attribute.Bool("error", true))
 		} else {
 			span.SetStatus(codes.Ok, "")
 		}
-		logger.Info("request handled",
+		fields := []zap.Field{
 			zap.String("http.request.method", method),
 			zap.String("http.route", route),
+			zap.String("url.scheme", scheme),
+			zap.String("server.address", r.Host),
 			zap.Int("http.response.status_code", rec.status),
+			zap.Int64("http.request.body.size", requestBytes),
+			zap.Int64("http.response.body.size", rec.bytesWritten),
+			zap.String("http.request.header.content_type", r.Header.Get("Content-Type")),
 			zap.String("network.peer.address", r.RemoteAddr),
 			zap.String("trace_id", span.SpanContext().TraceID().String()),
-			zap.Float64("http.server.request.duration", time.Since(start).Seconds()),
-		)
+			zap.String("span_id", span.SpanContext().SpanID().String()),
+			zap.Float64("http.server.request.duration", duration.Seconds()),
+		}
+		fields = append(fields, telemetryFields(ctx)...)
+		if rec.status >= 500 {
+			logger.Error("request handled", fields...)
+			return
+		}
+		logger.Info("request handled", fields...)
 	})
 }
 
@@ -110,12 +140,27 @@ func NormalizeErrors(next http.Handler) http.Handler {
 
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
+	status       int
+	bytesWritten int64
+	wroteHeader  bool
 }
 
 func (r *statusRecorder) WriteHeader(code int) {
+	if r.wroteHeader {
+		return
+	}
+	r.wroteHeader = true
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(r.status)
+	}
+	n, err := r.ResponseWriter.Write(b)
+	r.bytesWritten += int64(n)
+	return n, err
 }
 
 type bufferedRecorder struct {

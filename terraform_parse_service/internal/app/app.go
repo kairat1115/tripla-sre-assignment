@@ -10,6 +10,10 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
@@ -20,6 +24,8 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/store"
 )
 
+const tracerName = "app"
+
 // App groups the API and metrics servers so they can be started and stopped
 // together.
 type App struct {
@@ -28,6 +34,7 @@ type App struct {
 	renderer        *render.Renderer
 	templateSources []templateSource
 	logger          *zap.Logger
+	metrics         *metrics.Metrics
 }
 
 type templateSource struct {
@@ -48,7 +55,7 @@ func New(cfg config.Config, logger *zap.Logger) (*App, error) {
 
 	router := httpapi.NewRouter(m, logger)
 	router.Handle(http.MethodGet, "/health", httpapi.NewHealthHandler(renderer, logger))
-	awsresource.NewRouter(renderer).RegisterRoutes(router)
+	awsresource.NewRouter(renderer, m).RegisterRoutes(router)
 
 	return &App{
 		apiServer: &http.Server{
@@ -59,6 +66,7 @@ func New(cfg config.Config, logger *zap.Logger) (*App, error) {
 		renderer:        renderer,
 		templateSources: sources,
 		logger:          logger,
+		metrics:         m,
 	}, nil
 }
 
@@ -142,9 +150,10 @@ func (a *App) watchTemplates(ctx context.Context) {
 func (a *App) watchProviderTemplates(ctx context.Context, source templateSource) {
 	signature, err := render.TemplateSignature(source.dir)
 	if err != nil {
+		a.recordTemplateWatchError(ctx, "terraform.provider.template.scan", source, "err-template-signature", err)
 		a.logger.Warn("template signature failed",
-			zap.String("provider", source.provider),
-			zap.String("templates_dir", source.dir),
+			zap.String("terraform.provider.name", source.provider),
+			zap.String("terraform.provider.template.dir", source.dir),
 			zap.Error(err),
 		)
 	}
@@ -159,9 +168,10 @@ func (a *App) watchProviderTemplates(ctx context.Context, source templateSource)
 		case <-ticker.C:
 			nextSignature, err := render.TemplateSignature(source.dir)
 			if err != nil {
+				a.recordTemplateWatchError(ctx, "terraform.provider.template.scan", source, "err-template-scan", err)
 				a.logger.Warn("template scan failed",
-					zap.String("provider", source.provider),
-					zap.String("templates_dir", source.dir),
+					zap.String("terraform.provider.name", source.provider),
+					zap.String("terraform.provider.template.dir", source.dir),
 					zap.Error(err),
 				)
 				continue
@@ -169,21 +179,83 @@ func (a *App) watchProviderTemplates(ctx context.Context, source templateSource)
 			if nextSignature == signature {
 				continue
 			}
-			if err := a.renderer.ReloadTemplates(source.provider, source.dir); err != nil {
+			if err := a.reloadProviderTemplates(ctx, source, signature, nextSignature); err != nil {
 				a.logger.Error("template reload failed",
-					zap.String("provider", source.provider),
-					zap.String("templates_dir", source.dir),
+					zap.String("terraform.provider.name", source.provider),
+					zap.String("terraform.provider.template.dir", source.dir),
 					zap.Error(err),
 				)
 				continue
 			}
 			signature = nextSignature
 			a.logger.Info("templates reloaded",
-				zap.String("provider", source.provider),
-				zap.String("templates_dir", source.dir),
+				zap.String("terraform.provider.name", source.provider),
+				zap.String("terraform.provider.template.dir", source.dir),
+				zap.String("terraform.provider.template.signature", nextSignature),
 			)
 		}
 	}
+}
+
+func (a *App) reloadProviderTemplates(ctx context.Context, source templateSource, currentSignature, nextSignature string) error {
+	start := time.Now()
+	ctx, span := otel.Tracer(tracerName).Start(ctx, "terraform.provider.template.reload",
+		trace.WithAttributes(templateSourceAttributes(source,
+			attribute.String("terraform.provider.template.signature.current", currentSignature),
+			attribute.String("terraform.provider.template.signature.next", nextSignature),
+		)...),
+	)
+	defer span.End()
+
+	span.AddEvent("terraform.provider.template.reload.start")
+	if err := a.renderer.ReloadTemplates(source.provider, source.dir); err != nil {
+		duration := time.Since(start).Seconds()
+		a.metrics.ObserveTemplateReload(source.provider, "error", time.Since(start))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		span.SetAttributes(
+			attribute.String("exception.slug", "err-template-reload"),
+			attribute.String("exception.message", err.Error()),
+			attribute.Bool("error", true),
+			attribute.Float64("terraform.provider.template.reload.duration", duration),
+		)
+		return err
+	}
+	duration := time.Since(start).Seconds()
+	a.metrics.ObserveTemplateReload(source.provider, "success", time.Since(start))
+	span.SetStatus(codes.Ok, "")
+	span.SetAttributes(
+		attribute.Bool("terraform.provider.template.reload.changed", true),
+		attribute.Float64("terraform.provider.template.reload.duration", duration),
+	)
+	span.AddEvent("terraform.provider.template.reload.success",
+		trace.WithAttributes(attribute.Float64("terraform.provider.template.reload.duration", duration)),
+	)
+	return nil
+}
+
+func (a *App) recordTemplateWatchError(ctx context.Context, spanName string, source templateSource, slug string, err error) {
+	_, span := otel.Tracer(tracerName).Start(ctx, spanName,
+		trace.WithAttributes(templateSourceAttributes(source)...),
+	)
+	defer span.End()
+
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+	span.SetAttributes(
+		attribute.String("exception.slug", slug),
+		attribute.String("exception.message", err.Error()),
+		attribute.Bool("error", true),
+	)
+}
+
+func templateSourceAttributes(source templateSource, extra ...attribute.KeyValue) []attribute.KeyValue {
+	attrs := []attribute.KeyValue{
+		attribute.String("terraform.provider.name", source.provider),
+		attribute.String("terraform.provider.template.dir", source.dir),
+		attribute.Float64("terraform.provider.template.poll_interval", source.interval.Seconds()),
+	}
+	return append(attrs, extra...)
 }
 
 func templatesPollInterval(pcfg config.ProviderConfig) time.Duration {

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -40,6 +41,9 @@ type Renderer struct {
 
 // New creates a renderer with provider-keyed stores and parsed template sets.
 func New(stores map[string]store.Store, templates map[string]*template.Template, m *metrics.Metrics) *Renderer {
+	for provider, tmpl := range templates {
+		m.SetTemplatesLoaded(provider, len(tmpl.Templates()))
+	}
 	return &Renderer{stores: stores, templates: templates, metrics: m}
 }
 
@@ -110,6 +114,7 @@ func (r *Renderer) ReloadTemplates(provider, dir string) error {
 	r.templatesMu.Lock()
 	defer r.templatesMu.Unlock()
 	r.templates[provider] = tmpl
+	r.metrics.SetTemplatesLoaded(provider, len(tmpl.Templates()))
 	return nil
 }
 
@@ -130,23 +135,26 @@ func (r *Renderer) TemplateCounts() map[string]int {
 func (r *Renderer) Generate(ctx context.Context, g resource.Generator) (string, error) {
 	start := time.Now()
 	resourceName := resourceLabel(g.TemplateName())
+	data := g.TemplateData()
+	dataType := "<nil>"
+	if data != nil {
+		dataType = reflect.TypeOf(data).String()
+	}
 
 	ctx, span := otel.Tracer(tracerName).Start(ctx, "render.generate",
 		trace.WithAttributes(
 			attribute.String("template.name", g.TemplateName()),
-			attribute.String("provider", g.Provider()),
+			attribute.String("template.resource", resourceName),
+			attribute.String("template.data.type", dataType),
+			attribute.String("terraform.provider.name", g.Provider()),
 			attribute.String("store.path", g.StoragePath()),
+			attribute.String("terraform.provider.storage.path", g.StoragePath()),
 		),
 	)
 	defer span.End()
 
 	recordErr := func(slug string, err error) (string, error) {
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
-		span.SetAttributes(
-			attribute.String("exception.slug", slug),
-			attribute.Bool("error", true),
-		)
+		recordSpanError(span, slug, err)
 		r.metrics.GenerationTotal.WithLabelValues(g.Provider(), resourceName, "error").Inc()
 		r.metrics.GenerationDuration.WithLabelValues(g.Provider(), resourceName).Observe(time.Since(start).Seconds())
 		return "", err
@@ -163,45 +171,132 @@ func (r *Renderer) Generate(ctx context.Context, g resource.Generator) (string, 
 		return recordErr("err-render-no-store", fmt.Errorf("no store registered for provider %s", g.Provider()))
 	}
 	var buf bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&buf, g.TemplateName(), g.TemplateData()); err != nil {
+	span.AddEvent("template.render.start",
+		trace.WithAttributes(
+			attribute.String("template.name", g.TemplateName()),
+			attribute.String("template.resource", resourceName),
+		),
+	)
+	if err := tmpl.ExecuteTemplate(&buf, g.TemplateName(), data); err != nil {
 		return recordErr("err-render-template", fmt.Errorf("render template %s: %w", g.TemplateName(), err))
 	}
+	span.AddEvent("template.render.success",
+		trace.WithAttributes(attribute.Int("terraform.rendered.bytes", buf.Len())),
+	)
+	span.SetAttributes(attribute.Int("terraform.rendered.bytes", buf.Len()))
+	span.AddEvent("store.put.start", trace.WithAttributes(attribute.String("store.path", g.StoragePath())))
+	storeStart := time.Now()
 	outputPath, err := st.Put(ctx, g.StoragePath(), buf.Bytes())
 	if err != nil {
+		r.metrics.ObserveStorageOperation(g.Provider(), "put", "error", time.Since(storeStart))
 		return recordErr("err-render-store-put", fmt.Errorf("write store: %w", err))
 	}
+	r.metrics.ObserveStorageOperation(g.Provider(), "put", "success", time.Since(storeStart))
 	span.SetStatus(codes.Ok, "")
-	span.SetAttributes(attribute.String("output.path", outputPath))
+	span.SetAttributes(attribute.String("terraform.provider.storage.output.path", outputPath))
+	span.AddEvent("store.put.success", trace.WithAttributes(attribute.String("terraform.provider.storage.output.path", outputPath)))
 	r.metrics.GenerationTotal.WithLabelValues(g.Provider(), resourceName, "success").Inc()
 	r.metrics.GenerationDuration.WithLabelValues(g.Provider(), resourceName).Observe(time.Since(start).Seconds())
+	r.metrics.ObserveRenderedBytes(g.Provider(), resourceName, buf.Len())
 	return outputPath, nil
 }
 
 // Read returns the rendered main.tf for the located resource.
 func (r *Renderer) Read(ctx context.Context, l resource.Locator) ([]byte, error) {
+	ctx, span := otel.Tracer(tracerName).Start(ctx, "render.read",
+		trace.WithAttributes(
+			attribute.String("terraform.provider.name", l.Provider()),
+			attribute.String("store.path", l.StoragePath()),
+			attribute.String("terraform.provider.storage.path", l.StoragePath()),
+		),
+	)
+	defer span.End()
+
 	st, ok := r.stores[l.Provider()]
 	if !ok {
-		return nil, fmt.Errorf("no store registered for provider %s", l.Provider())
+		err := fmt.Errorf("no store registered for provider %s", l.Provider())
+		recordSpanError(span, "err-render-no-store", err)
+		return nil, err
 	}
-	return st.Get(ctx, l.StoragePath())
+	start := time.Now()
+	content, err := st.Get(ctx, l.StoragePath())
+	if err != nil {
+		r.metrics.ObserveStorageOperation(l.Provider(), "get", "error", time.Since(start))
+		recordSpanError(span, "err-render-store-get", err)
+		return nil, err
+	}
+	r.metrics.ObserveStorageOperation(l.Provider(), "get", "success", time.Since(start))
+	span.SetStatus(codes.Ok, "")
+	span.SetAttributes(attribute.Int("terraform.output.bytes", len(content)))
+	return content, nil
 }
 
 // List returns resource names under the located resource prefix.
 func (r *Renderer) List(ctx context.Context, l resource.Locator) ([]string, error) {
+	ctx, span := otel.Tracer(tracerName).Start(ctx, "render.list",
+		trace.WithAttributes(
+			attribute.String("terraform.provider.name", l.Provider()),
+			attribute.String("store.path", path.Dir(l.StoragePath())),
+			attribute.String("terraform.provider.storage.path", path.Dir(l.StoragePath())),
+		),
+	)
+	defer span.End()
+
 	st, ok := r.stores[l.Provider()]
 	if !ok {
-		return nil, fmt.Errorf("no store registered for provider %s", l.Provider())
+		err := fmt.Errorf("no store registered for provider %s", l.Provider())
+		recordSpanError(span, "err-render-no-store", err)
+		return nil, err
 	}
-	return st.List(ctx, path.Dir(l.StoragePath()))
+	start := time.Now()
+	items, err := st.List(ctx, path.Dir(l.StoragePath()))
+	if err != nil {
+		r.metrics.ObserveStorageOperation(l.Provider(), "list", "error", time.Since(start))
+		recordSpanError(span, "err-render-store-list", err)
+		return nil, err
+	}
+	r.metrics.ObserveStorageOperation(l.Provider(), "list", "success", time.Since(start))
+	span.SetStatus(codes.Ok, "")
+	span.SetAttributes(attribute.Int("terraform.resource.count", len(items)))
+	return items, nil
 }
 
 // Delete removes the rendered files for the located resource.
 func (r *Renderer) Delete(ctx context.Context, l resource.Locator) error {
+	ctx, span := otel.Tracer(tracerName).Start(ctx, "render.delete",
+		trace.WithAttributes(
+			attribute.String("terraform.provider.name", l.Provider()),
+			attribute.String("store.path", l.StoragePath()),
+			attribute.String("terraform.provider.storage.path", l.StoragePath()),
+		),
+	)
+	defer span.End()
+
 	st, ok := r.stores[l.Provider()]
 	if !ok {
-		return fmt.Errorf("no store registered for provider %s", l.Provider())
+		err := fmt.Errorf("no store registered for provider %s", l.Provider())
+		recordSpanError(span, "err-render-no-store", err)
+		return err
 	}
-	return st.Delete(ctx, l.StoragePath())
+	start := time.Now()
+	if err := st.Delete(ctx, l.StoragePath()); err != nil {
+		r.metrics.ObserveStorageOperation(l.Provider(), "delete", "error", time.Since(start))
+		recordSpanError(span, "err-render-store-delete", err)
+		return err
+	}
+	r.metrics.ObserveStorageOperation(l.Provider(), "delete", "success", time.Since(start))
+	span.SetStatus(codes.Ok, "")
+	return nil
+}
+
+func recordSpanError(span trace.Span, slug string, err error) {
+	span.SetStatus(codes.Error, err.Error())
+	span.RecordError(err)
+	span.SetAttributes(
+		attribute.String("exception.slug", slug),
+		attribute.String("exception.message", err.Error()),
+		attribute.Bool("error", true),
+	)
 }
 
 func resourceLabel(templateName string) string {
