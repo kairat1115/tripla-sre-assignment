@@ -1,6 +1,6 @@
 # Terraform Parse Service
 
-HTTP service that renders Terraform HCL configurations from a JSON payload and writes them to the storage.
+HTTP service that renders Terraform HCL configurations from a JSON payload and writes them to filesystem storage. Supports full CRUD over generated configs per resource type.
 
 ## Requirements
 
@@ -48,11 +48,17 @@ Config is read from `configs/config.yaml` at startup. Set `CONFIG_PATH` to use a
 
 ```yaml
 listen_addr: ":8080"
+environment: "development"
+version: "dev"
 logger:
   level: "info"           # debug | info | warn | error
-  metadata:
-    service: "terraform-parse-service"
-    env: "${APP_ENV}"     # resolved from environment
+tracing:
+  exporter: "stdout"      # stdout | otlp
+  endpoint: "localhost:4317"
+  insecure: false
+  sample_ratio: 1.0
+metrics:
+  addr: ":9091"           # Prometheus metrics endpoint
 providers:
   aws:
     templates_dir: "./templates/aws"
@@ -64,7 +70,6 @@ Values support `${VAR}` interpolation — any unset variable falls back to the l
 | Environment variable | Effect |
 |---|---|
 | `CONFIG_PATH` | Path to the YAML config file (default: `configs/config.yaml`) |
-| `APP_ENV` | Injected into the `env` metadata field on every log record |
 
 ## Testing
 
