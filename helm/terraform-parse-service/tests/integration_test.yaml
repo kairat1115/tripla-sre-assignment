@@ -113,6 +113,31 @@ tests:
           path: spec.template.metadata.annotations["checksum/config"]
           pattern: "^[a-f0-9]{64}$"
 
+  - it: initContainers[0] is k8s-sidecar-init
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: k8s-sidecar-init
+
+  - it: k8s-sidecar-init METHOD env var is LIST
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: METHOD
+            value: LIST
+
+  - it: k8s-sidecar-init mounts templates volume
+    template: charts/app/templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: templates
+            mountPath: /templates
+
   - it: HPA renders when staging overlay sets hpa.enabled true
     template: charts/app/templates/hpa.yaml
     values:

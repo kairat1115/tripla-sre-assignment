@@ -26,6 +26,8 @@ extraVolumeMounts: []
 
 configMaps: []
 
+initContainers: []
+
 sidecars: []
 
 resources:

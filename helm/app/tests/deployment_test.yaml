@@ -202,3 +202,16 @@ tests:
       - equal:
           path: spec.template.spec.automountServiceAccountToken
           value: true
+
+  - it: no initContainers by default
+    asserts:
+      - isNull:
+          path: spec.template.spec.initContainers
+
+  - it: initContainers rendered when set
+    values:
+      - fixtures/init-containers.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: my-init

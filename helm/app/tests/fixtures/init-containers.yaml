@@ -1,0 +1,4 @@
+initContainers:
+  - name: my-init
+    image: busybox:1.36
+    command: ["sh", "-c", "echo init"]

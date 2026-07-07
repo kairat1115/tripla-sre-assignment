@@ -42,6 +42,28 @@ app:
     - name: output
       mountPath: /output
 
+  initContainers:
+    - name: k8s-sidecar-init
+      image: kiwigrid/k8s-sidecar:1.27.5
+      env:
+        - name: LABEL
+          value: "terraform-parse-service/template"
+        - name: LABEL_VALUE
+          value: "true"
+        - name: FOLDER
+          value: "/templates"
+        - name: RESOURCE
+          value: "configmap"
+        - name: METHOD
+          value: "LIST"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      volumeMounts:
+        - name: templates
+          mountPath: /templates
+
   sidecars:
     - name: k8s-sidecar
       image: kiwigrid/k8s-sidecar:1.27.5
