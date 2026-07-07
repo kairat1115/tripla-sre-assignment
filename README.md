@@ -24,7 +24,7 @@ Assignment reference: https://github.com/umami-dev/interview/tree/main/terraform
 
 Verify:
 ```bash
-kind version && kubectl version --client && helm version && istioctl version --remote=false
+kind version && kubectl version --client && helm version && istioctl version --remote=false && make --version
 ```
 
 ---
