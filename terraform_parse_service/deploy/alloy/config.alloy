@@ -72,15 +72,17 @@ loki.process "server" {
 
   stage.json {
     expressions = {
-      trace_id = "trace_id",
-      level    = "level",
+      trace_id     = "trace_id",
+      level        = "level",
+      service_name = "service_name",
     }
   }
 
   stage.labels {
     values = {
-      trace_id = "trace_id",
-      level    = "level",
+      trace_id     = "trace_id",
+      level        = "level",
+      service_name = "service_name",
     }
   }
 }
