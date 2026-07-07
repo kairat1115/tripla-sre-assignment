@@ -22,7 +22,11 @@ func New(cfg config.Config) (*zap.Logger, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build logger: %w", err)
 	}
-	fields := []zap.Field{zap.String("service_name", cfg.ServiceName)}
+	fields := []zap.Field{
+		zap.String("service_name", cfg.ServiceName),
+		zap.String("environment", cfg.Environment),
+		zap.String("version", cfg.Version),
+	}
 	for k, v := range cfg.Logger.Metadata {
 		fields = append(fields, zap.String(k, v))
 	}
