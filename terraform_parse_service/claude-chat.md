@@ -227,3 +227,24 @@ implement it all. when you’re done with a task or phase, mark it as completed 
 # add health endpoint
 
 lets add /health endpoint. it must return 200 if templates folder is not empty, otherwise 503
+
+# Request to create plan8.md
+
+i want to add more endpoints. GET /api/aws/v1/s3/buckets will list all buckets I have configured. GET /api/aws/v1/s3/buckets/{bucket_name} will return rendered tf file, PUT /api/aws/v1/s3/buckets/{bucket_name} will update bucket with payload, DELETE /api/aws/v1/s3/buckets/{bucket_name} will delete bucket from output folder. write a detailed plan8.md document outlining how to implement this. include code snippets
+
+---
+
+some remarks and edits to plan, and ask clause with the following - I added a few notes to the document, address all the notes and update the document accordingly. don’t implement yet
+
+---
+
+add a detailed todo list to the plan, with all the phases and individual tasks necessary to complete the plan - don’t implement yet
+
+---
+
+implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.
+
+---
+
+1. in bucket go, do not call servePOST in post. move everything to Post function.
+2. lets rename Post to Create, Put to Update

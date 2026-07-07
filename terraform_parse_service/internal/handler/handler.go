@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -10,6 +11,9 @@ import (
 
 type Terraform interface {
 	Generate(g service.Generator) (string, error)
+	ListBuckets(ctx context.Context, provider string) ([]string, error)
+	ReadBucket(ctx context.Context, provider, bucketName string) ([]byte, error)
+	DeleteBucket(ctx context.Context, provider, bucketName string) error
 }
 
 type Result struct {

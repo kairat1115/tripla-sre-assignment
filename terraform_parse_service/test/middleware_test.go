@@ -10,7 +10,8 @@ func TestIntegration_MethodNotAllowed(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/aws/v1/s3/buckets")
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/api/aws/v1/s3/buckets", nil)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}

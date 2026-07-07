@@ -3,9 +3,11 @@ package s3
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -32,22 +34,29 @@ type bucketProperties struct {
 	BucketName string `json:"bucket-name"`
 }
 
+func validateBucketName(name string) error {
+	switch {
+	case name == "":
+		return fmt.Errorf("missing required property: bucket-name")
+	case len(name) < 3 || len(name) > 63:
+		return fmt.Errorf("invalid bucket-name: must be 3–63 characters")
+	case !bucketNameRE.MatchString(name):
+		return fmt.Errorf("invalid bucket-name: must contain only lowercase letters, digits, hyphens, and dots, and start/end with a letter or digit")
+	case strings.Contains(name, ".."):
+		return fmt.Errorf("invalid bucket-name: must not contain consecutive dots")
+	default:
+		return nil
+	}
+}
+
 func (p bucketProperties) Validate() error {
 	switch {
 	case p.Region == "":
 		return fmt.Errorf("missing required property: aws-region")
 	case p.ACL == "":
 		return fmt.Errorf("missing required property: acl")
-	case p.BucketName == "":
-		return fmt.Errorf("missing required property: bucket-name")
-	case len(p.BucketName) < 3 || len(p.BucketName) > 63:
-		return fmt.Errorf("invalid bucket-name: must be 3–63 characters")
-	case !bucketNameRE.MatchString(p.BucketName):
-		return fmt.Errorf("invalid bucket-name: must contain only lowercase letters, digits, hyphens, and dots, and start/end with a letter or digit")
-	case strings.Contains(p.BucketName, ".."):
-		return fmt.Errorf("invalid bucket-name: must not contain consecutive dots")
 	default:
-		return nil
+		return validateBucketName(p.BucketName)
 	}
 }
 
@@ -92,10 +101,11 @@ func NewBucketHandler(svc handler.Terraform, logger *zap.Logger, m *metrics.Metr
 	return &BucketHandler{svc: svc, logger: logger, m: m}
 }
 
-func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-	method := r.Method
-	path := r.URL.Path
+func (h *BucketHandler) Create() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		method := r.Method
+		path := r.URL.Path
 
 	h.m.HTTPInFlight.WithLabelValues(method, path).Inc()
 	defer func() {
@@ -232,7 +242,225 @@ func (h *BucketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		zap.String("output.path", outputPath),
 		zap.Float64("http.server.request.duration", time.Since(start).Seconds()),
 	)...)
-	respond(handler.Result{Code: http.StatusCreated, Data: bucketResponse{OutputPath: outputPath}})
+		respond(handler.Result{Code: http.StatusCreated, Data: bucketResponse{OutputPath: outputPath}})
+	}
+}
+
+func (h *BucketHandler) List() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, span := otel.Tracer(tracerName).Start(r.Context(), "http.request",
+			trace.WithSpanKind(trace.SpanKindServer),
+			trace.WithAttributes(
+				attribute.String("http.request.method", r.Method),
+				attribute.String("http.route", "GET /api/aws/v1/s3/buckets"),
+				attribute.String("network.peer.address", r.RemoteAddr),
+			),
+		)
+		defer span.End()
+
+		buckets, err := h.svc.ListBuckets(ctx, "aws")
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-list-buckets"),
+				attribute.Bool("error", true),
+			)
+			handler.WriteError(w, http.StatusInternalServerError, "list failed")
+			return
+		}
+		span.SetStatus(codes.Ok, "")
+		span.SetAttributes(attribute.Int("aws.s3.bucket_count", len(buckets)))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string][]string{"buckets": buckets})
+	}
+}
+
+func (h *BucketHandler) Get() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bucketName := r.PathValue("bucket_name")
+		ctx, span := otel.Tracer(tracerName).Start(r.Context(), "http.request",
+			trace.WithSpanKind(trace.SpanKindServer),
+			trace.WithAttributes(
+				attribute.String("http.request.method", r.Method),
+				attribute.String("http.route", "GET /api/aws/v1/s3/buckets/{bucket_name}"),
+				attribute.String("network.peer.address", r.RemoteAddr),
+				attribute.String("aws.s3.bucket_name", bucketName),
+			),
+		)
+		defer span.End()
+
+		if err := validateBucketName(bucketName); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-validation"),
+				attribute.Bool("error", true),
+			)
+			handler.WriteError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+
+		content, err := h.svc.ReadBucket(ctx, "aws", bucketName)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				span.SetStatus(codes.Error, err.Error())
+				span.SetAttributes(
+					attribute.String("exception.slug", "err-handler-bucket-not-found"),
+					attribute.Bool("error", true),
+				)
+				handler.WriteError(w, http.StatusNotFound, "bucket not found")
+				return
+			}
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-read-bucket"),
+				attribute.Bool("error", true),
+			)
+			handler.WriteError(w, http.StatusInternalServerError, "read failed")
+			return
+		}
+		span.SetStatus(codes.Ok, "")
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(content)
+	}
+}
+
+func (h *BucketHandler) Update() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bucketName := r.PathValue("bucket_name")
+		start := time.Now()
+		path := r.URL.Path
+
+		h.m.HTTPInFlight.WithLabelValues(r.Method, path).Inc()
+		defer func() {
+			h.m.HTTPInFlight.WithLabelValues(r.Method, path).Dec()
+			h.m.HTTPDuration.WithLabelValues(r.Method, path).Observe(time.Since(start).Seconds())
+		}()
+
+		respond := func(result handler.Result) {
+			h.m.HTTPRequestsTotal.WithLabelValues(r.Method, path, strconv.Itoa(result.Code)).Inc()
+			handler.Respond(w, result)
+		}
+
+		ctx, span := otel.Tracer(tracerName).Start(r.Context(), "http.request",
+			trace.WithSpanKind(trace.SpanKindServer),
+			trace.WithAttributes(
+				attribute.String("http.request.method", r.Method),
+				attribute.String("http.route", "PUT /api/aws/v1/s3/buckets/{bucket_name}"),
+				attribute.String("network.peer.address", r.RemoteAddr),
+				attribute.String("aws.s3.bucket_name", bucketName),
+			),
+		)
+		defer span.End()
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-body-read"),
+				attribute.Bool("error", true),
+			)
+			respond(handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
+			return
+		}
+
+		var req bucketRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-json-decode"),
+				attribute.Bool("error", true),
+			)
+			respond(handler.Result{Code: http.StatusBadRequest, Msg: "invalid JSON", Err: err})
+			return
+		}
+
+		p := req.Payload.Properties
+		if p.BucketName != "" && p.BucketName != bucketName {
+			span.SetStatus(codes.Error, "bucket-name mismatch")
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-bucket-name-mismatch"),
+				attribute.Bool("error", true),
+			)
+			respond(handler.Result{Code: http.StatusUnprocessableEntity, Msg: "bucket-name in body must match path parameter", Err: fmt.Errorf("bucket-name mismatch")})
+			return
+		}
+		p.BucketName = bucketName
+
+		if err := p.Validate(); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-validation"),
+				attribute.Bool("error", true),
+			)
+			respond(handler.Result{Code: http.StatusUnprocessableEntity, Msg: err.Error(), Err: err})
+			return
+		}
+		span.SetAttributes(
+			attribute.String("aws.s3.region", p.Region),
+			attribute.String("aws.s3.acl", p.ACL),
+		)
+
+		gen := &bucketGenerator{props: p, ctx: ctx}
+		outputPath, err := h.svc.Generate(gen)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-generate"),
+				attribute.Bool("error", true),
+			)
+			respond(handler.Result{Code: http.StatusInternalServerError, Msg: "generation failed", Err: err})
+			return
+		}
+		span.SetStatus(codes.Ok, "")
+		span.SetAttributes(attribute.String("output.path", outputPath))
+		respond(handler.Result{Code: http.StatusOK, Data: bucketResponse{OutputPath: outputPath}})
+	}
+}
+
+func (h *BucketHandler) Delete() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bucketName := r.PathValue("bucket_name")
+		ctx, span := otel.Tracer(tracerName).Start(r.Context(), "http.request",
+			trace.WithSpanKind(trace.SpanKindServer),
+			trace.WithAttributes(
+				attribute.String("http.request.method", r.Method),
+				attribute.String("http.route", "DELETE /api/aws/v1/s3/buckets/{bucket_name}"),
+				attribute.String("network.peer.address", r.RemoteAddr),
+				attribute.String("aws.s3.bucket_name", bucketName),
+			),
+		)
+		defer span.End()
+
+		if err := validateBucketName(bucketName); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-validation"),
+				attribute.Bool("error", true),
+			)
+			handler.WriteError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+
+		if err := h.svc.DeleteBucket(ctx, "aws", bucketName); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
+			span.SetAttributes(
+				attribute.String("exception.slug", "err-handler-delete-bucket"),
+				attribute.Bool("error", true),
+			)
+			handler.WriteError(w, http.StatusInternalServerError, "delete failed")
+			return
+		}
+		span.SetStatus(codes.Ok, "")
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 var _ service.Generator = (*bucketGenerator)(nil)

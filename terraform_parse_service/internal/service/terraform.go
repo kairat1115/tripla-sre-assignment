@@ -119,6 +119,30 @@ func (s *TerraformService) Generate(g Generator) (string, error) {
 	return path, nil
 }
 
+func (s *TerraformService) ListBuckets(ctx context.Context, provider string) ([]string, error) {
+	writer, ok := s.writers[provider]
+	if !ok {
+		return nil, fmt.Errorf("no writer registered for provider %s", provider)
+	}
+	return writer.List(ctx, "s3")
+}
+
+func (s *TerraformService) ReadBucket(ctx context.Context, provider, bucketName string) ([]byte, error) {
+	writer, ok := s.writers[provider]
+	if !ok {
+		return nil, fmt.Errorf("no writer registered for provider %s", provider)
+	}
+	return writer.Read(ctx, "s3/"+bucketName)
+}
+
+func (s *TerraformService) DeleteBucket(ctx context.Context, provider, bucketName string) error {
+	writer, ok := s.writers[provider]
+	if !ok {
+		return fmt.Errorf("no writer registered for provider %s", provider)
+	}
+	return writer.Delete(ctx, "s3/"+bucketName)
+}
+
 func resourceLabel(templateName string) string {
 	name := strings.TrimSuffix(templateName, ".tf.tmpl")
 	return strings.ReplaceAll(name, "/", "_")

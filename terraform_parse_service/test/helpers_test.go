@@ -40,6 +40,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 		m,
 	)
 	mux := http.NewServeMux()
-	mux.Handle("POST /api/aws/v1/s3/buckets", s3handler.NewBucketHandler(tfSvc, zap.NewNop(), m))
+	s3 := s3handler.NewBucketHandler(tfSvc, zap.NewNop(), m)
+	mux.Handle("GET /api/aws/v1/s3/buckets", s3.List())
+	mux.Handle("POST /api/aws/v1/s3/buckets", s3.Create())
+	mux.Handle("GET /api/aws/v1/s3/buckets/{bucket_name}", s3.Get())
+	mux.Handle("PUT /api/aws/v1/s3/buckets/{bucket_name}", s3.Update())
+	mux.Handle("DELETE /api/aws/v1/s3/buckets/{bucket_name}", s3.Delete())
 	return httptest.NewServer(handler.Middleware(mux))
 }

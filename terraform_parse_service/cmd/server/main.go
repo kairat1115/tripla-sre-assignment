@@ -69,7 +69,12 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /health", handler.NewHealthHandler(templates, l))
-	mux.Handle("POST /api/aws/v1/s3/buckets", s3handler.NewBucketHandler(tfSvc, l, m))
+	s3 := s3handler.NewBucketHandler(tfSvc, l, m)
+	mux.Handle("GET /api/aws/v1/s3/buckets", s3.List())
+	mux.Handle("POST /api/aws/v1/s3/buckets", s3.Create())
+	mux.Handle("GET /api/aws/v1/s3/buckets/{bucket_name}", s3.Get())
+	mux.Handle("PUT /api/aws/v1/s3/buckets/{bucket_name}", s3.Update())
+	mux.Handle("DELETE /api/aws/v1/s3/buckets/{bucket_name}", s3.Delete())
 
 	providerNames := make([]string, 0, len(cfg.Providers))
 	for p := range cfg.Providers {

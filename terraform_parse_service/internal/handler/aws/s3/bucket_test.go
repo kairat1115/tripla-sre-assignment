@@ -2,10 +2,12 @@ package s3
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,12 +19,32 @@ import (
 )
 
 type stubTerraform struct {
-	path string
-	err  error
+	path    string
+	err     error
+	buckets []string
+	content []byte
 }
 
 func (s *stubTerraform) Generate(_ service.Generator) (string, error) {
 	return s.path, s.err
+}
+
+func (s *stubTerraform) ListBuckets(_ context.Context, _ string) ([]string, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.buckets == nil {
+		return []string{}, nil
+	}
+	return s.buckets, nil
+}
+
+func (s *stubTerraform) ReadBucket(_ context.Context, _ string, _ string) ([]byte, error) {
+	return s.content, s.err
+}
+
+func (s *stubTerraform) DeleteBucket(_ context.Context, _ string, _ string) error {
+	return s.err
 }
 
 func testMetrics() *metrics.Metrics {
@@ -34,7 +56,7 @@ func TestBucketHandler_BadJSON(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString("{bad"))
 
-	h.ServeHTTP(rec, req)
+	h.Create()(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", rec.Code)
@@ -52,7 +74,7 @@ func TestBucketHandler_MissingProperty(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 
-	h.ServeHTTP(rec, req)
+	h.Create()(rec, req)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("want 422, got %d", rec.Code)
@@ -65,7 +87,7 @@ func TestBucketHandler_GenerationError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 
-	h.ServeHTTP(rec, req)
+	h.Create()(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("want 500, got %d", rec.Code)
@@ -78,7 +100,7 @@ func TestBucketHandler_Success(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 
-	h.ServeHTTP(rec, req)
+	h.Create()(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d", rec.Code)
@@ -114,10 +136,123 @@ func TestBucketHandler_InvalidBucketName(t *testing.T) {
 			h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
-			h.ServeHTTP(rec, req)
+			h.Create()(rec, req)
 			if rec.Code != http.StatusUnprocessableEntity {
 				t.Fatalf("%s: want 422, got %d", tc.name, rec.Code)
 			}
 		})
+	}
+}
+
+func TestBucketHandler_List_Empty(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets", nil)
+	h.List()(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var body map[string][]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["buckets"] == nil || len(body["buckets"]) != 0 {
+		t.Fatalf("want empty buckets array, got %v", body["buckets"])
+	}
+}
+
+func TestBucketHandler_List_WithBuckets(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{buckets: []string{"alpha", "beta"}}, zap.NewNop(), testMetrics())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets", nil)
+	h.List()(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var body map[string][]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body["buckets"]) != 2 {
+		t.Fatalf("want 2 buckets, got %v", body["buckets"])
+	}
+}
+
+func TestBucketHandler_Get_NotFound(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{err: fmt.Errorf("read %s: %w", "x", os.ErrNotExist)}, zap.NewNop(), testMetrics())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets/my-bucket", nil)
+	req.SetPathValue("bucket_name", "my-bucket")
+	h.Get()(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d", rec.Code)
+	}
+}
+
+func TestBucketHandler_Get_Success(t *testing.T) {
+	want := []byte("resource \"aws_s3_bucket\" {}")
+	h := NewBucketHandler(&stubTerraform{content: want}, zap.NewNop(), testMetrics())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets/my-bucket", nil)
+	req.SetPathValue("bucket_name", "my-bucket")
+	h.Get()(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	if rec.Body.String() != string(want) {
+		t.Fatalf("want %q, got %q", want, rec.Body.String())
+	}
+}
+
+func TestBucketHandler_Put_NameMismatch(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"other-bucket"}}}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/aws/v1/s3/buckets/my-bucket", bytes.NewBufferString(body))
+	req.SetPathValue("bucket_name", "my-bucket")
+	h.Update()(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d", rec.Code)
+	}
+}
+
+func TestBucketHandler_Put_Success(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{path: "/out/s3/my-bucket/main.tf"}, zap.NewNop(), testMetrics())
+	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/aws/v1/s3/buckets/my-bucket", bytes.NewBufferString(body))
+	req.SetPathValue("bucket_name", "my-bucket")
+	h.Update()(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var resp bucketResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.OutputPath != "/out/s3/my-bucket/main.tf" {
+		t.Fatalf("unexpected output_path: %s", resp.OutputPath)
+	}
+}
+
+func TestBucketHandler_Delete_InvalidName(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/aws/v1/s3/buckets/AB", nil)
+	req.SetPathValue("bucket_name", "AB")
+	h.Delete()(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d", rec.Code)
+	}
+}
+
+func TestBucketHandler_Delete_Success(t *testing.T) {
+	h := NewBucketHandler(&stubTerraform{}, zap.NewNop(), testMetrics())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/aws/v1/s3/buckets/my-bucket", nil)
+	req.SetPathValue("bucket_name", "my-bucket")
+	h.Delete()(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("want 204, got %d", rec.Code)
 	}
 }
