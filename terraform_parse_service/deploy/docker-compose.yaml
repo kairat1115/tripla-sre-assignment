@@ -13,6 +13,7 @@ services:
       - output:/output
     environment:
       CONFIG_PATH: /etc/server/config.yaml
+      VERSION: ${GIT_SHA:-dev}
     read_only: true
     depends_on:
       alloy:

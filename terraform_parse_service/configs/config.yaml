@@ -1,6 +1,6 @@
 listen_addr: ":8080"
-environment: "development"
-version: "dev"
+environment: "${ENVIRONMENT:development}"
+version: "${VERSION:dev}"
 logger:
   level: "info"
 tracing:
