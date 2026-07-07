@@ -174,13 +174,24 @@ port-forward-app:
 
 ## ── Test ─────────────────────────────────────────────────────────────────────
 
+CURL := curl -s \
+  -H "Host: terraform-parse-service.example.com" \
+  -H "release: terraform-parse-service" \
+  -H "Content-Type: application/json"
+
 test:
-	curl -s -X POST http://localhost/api/aws/v1/s3/buckets \
-	  -H "Host: terraform-parse-service.example.com" \
-	  -H "release: terraform-parse-service" \
-	  -H "Content-Type: application/json" \
+	@echo "=== POST: create bucket ==="
+	@$(CURL) -X POST http://localhost/api/aws/v1/s3/buckets \
 	  -d '{"payload":{"properties":{"aws-region":"us-east-1","acl":"private","bucket-name":"test-bucket-01"}}}' \
 	  | jq .
+	@echo "=== GET: list buckets ==="
+	@$(CURL) http://localhost/api/aws/v1/s3/buckets | jq .
+	@echo "=== GET: bucket contents ==="
+	@$(CURL) http://localhost/api/aws/v1/s3/buckets/test-bucket-01 | tee /tmp/actual.tf
+	@echo "=== DIFF: actual vs expected ==="
+	@diff deploy/expected-bucket.tf /tmp/actual.tf \
+	  && echo "PASS: output matches expected" \
+	  || (echo "FAIL: output differs" && exit 1)
 
 ## ── Teardown ─────────────────────────────────────────────────────────────────
 
