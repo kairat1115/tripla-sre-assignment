@@ -383,6 +383,4 @@ kind delete cluster --name tripla
 kubectl rollout restart deployment/terraform-parse-service -n terraform-parse-service
 ```
 
-**RDS template has no handler.** `rds.tf.tmpl` exists at `helm/terraform-parse-service/files/templates/aws/s3/rds.tf.tmpl` (misplaced in the s3 subdirectory) and no HTTP handler is registered for it. Unreachable through the API.
-
 **No application-level health endpoint.** Probes use `tcpSocket` on port 8080 — confirms port open, not service ready. A failed `LoadTemplates()` after server start will pass the probe while the service returns 500s.
