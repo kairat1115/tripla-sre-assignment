@@ -18,7 +18,7 @@ VERSION_PROM    := 29.14.0
 
 .PHONY: cluster-up cluster-down \
         image-build image-load \
-        istio-install istio-patch \
+        istio-install istio-patch namespace-setup \
         metrics-server \
         obs-repos obs-tempo obs-loki obs-prometheus obs-alloy obs-grafana obs \
         app-dep app-install app-upgrade app \
@@ -55,8 +55,11 @@ istio-patch:
 	kubectl patch svc istio-ingressgateway -n istio-system \
 	  --type=json \
 	  -p '[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"replace","path":"/spec/ports/1/nodePort","value":30080}]'
+
+namespace-setup:
 	kubectl create namespace $(NAMESPACE_APP) --dry-run=client -o yaml | kubectl apply -f -
 	kubectl label namespace $(NAMESPACE_APP) istio-injection=enabled --overwrite
+	kubectl create namespace $(NAMESPACE_MON) --dry-run=client -o yaml | kubectl apply -f -
 
 ## ── metrics-server ───────────────────────────────────────────────────────────
 
@@ -76,7 +79,7 @@ obs-repos:
 obs-tempo:
 	helm upgrade --install tempo $(CHART_TEMPO) \
 	  --version $(VERSION_TEMPO) \
-	  --namespace $(NAMESPACE_MON) --create-namespace \
+	  --namespace $(NAMESPACE_MON) \
 	  --set tempo.storage.trace.backend=local \
 	  --set tempo.storage.trace.local.path=/var/tempo/traces \
 	  --set persistence.enabled=false

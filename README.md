@@ -44,16 +44,19 @@ make image-load
 make istio-install
 make istio-patch
 
-# 4. Install metrics-server (required for HPA)
+# 4. Create app namespace with Istio injection enabled
+make namespace-setup
+
+# 5. Install metrics-server (required for HPA)
 make metrics-server
 
-# 5. Install full observability stack
+# 6. Install full observability stack
 make obs
 
-# 6. Install service
+# 7. Install service
 make app
 
-# 7. Test via Istio ingress (port 80)
+# 8. Test via Istio ingress (port 80)
 make test
 ```
 
@@ -122,16 +125,19 @@ kubectl patch svc istio-ingressgateway -n istio-system \
 
 > **After every cluster restart**, the IngressGateway NodePort assignment resets. Re-run `make istio-patch` before testing. If requests return 404 from Envoy, this is the first thing to check.
 
-Create namespace and enable Istio sidecar injection:
+### Step 4: Create app namespace
+
+Create namespaces and enable Istio sidecar injection on the app namespace:
 
 ```bash
 kubectl create namespace terraform-parse-service
 kubectl label namespace terraform-parse-service istio-injection=enabled
+kubectl create namespace monitoring
 ```
 
-### Step 4: Install metrics-server
+### Step 5: Install metrics-server
 
-Required for HPA — kind does not ship it. Prod values enable HPA (min 2 / max 6); without metrics-server the HPA stays in `Unknown` state.
+Required for HPA — kind does not ship it. Without metrics-server the HPA stays in `Unknown` state.
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -144,7 +150,7 @@ kubectl patch deployment metrics-server -n kube-system \
 kubectl rollout status deployment/metrics-server -n kube-system
 ```
 
-### Step 5: Observability stack
+### Step 6: Observability stack
 
 All components in the `monitoring` namespace. Charts use pinned OCI versions — no `helm repo add` needed for Tempo, Loki, Grafana, or Prometheus.
 
@@ -157,7 +163,7 @@ helm repo update
 ```bash
 helm upgrade --install tempo oci://ghcr.io/grafana-community/helm-charts/tempo \
   --version 2.2.3 \
-  --namespace monitoring --create-namespace \
+  --namespace monitoring \
   --set tempo.storage.trace.backend=local \
   --set tempo.storage.trace.local.path=/var/tempo/traces \
   --set persistence.enabled=false
@@ -227,7 +233,7 @@ helm upgrade --install grafana oci://ghcr.io/grafana-community/helm-charts/grafa
 kubectl rollout status deployment/grafana -n monitoring
 ```
 
-### Step 6: kind-specific values override
+### Step 7: kind-specific values override
 
 File: `deploy/values-kind.yaml`
 
@@ -236,11 +242,11 @@ Key overrides for kind:
 1. `image.repository` + `pullPolicy: IfNotPresent` — uses locally loaded image, no registry pull.
 2. `tracing.endpoint` — points to `alloy.monitoring.svc.cluster.local:4317` (base values default to `localhost:4317`).
 3. `tracing.insecure: true` — Tempo in kind has no TLS cert.
-4. `image.tag` — passed via `--set app.image.tag` at install time (SHA from Step 2).
+4. `image.tag` — passed via `--set app.image.tag` at install time (SHA from Step 2: Build image).
 
 The `configMaps` block is an inline YAML struct and cannot be overridden via `--set`. `deploy/values-kind.yaml` replaces the entire block with the correct values.
 
-### Step 7: Install terraform-parse-service
+### Step 8: Install terraform-parse-service
 
 ```bash
 helm dependency update helm/terraform-parse-service
@@ -279,7 +285,7 @@ kubectl exec -n terraform-parse-service \
 | Istio VirtualService | header match `release: terraform-parse-service` |
 | Istio DestinationRule | enabled (values-prod.yaml) |
 
-### Step 8: Test the service
+### Step 9: Test the service
 
 **Via Istio IngressGateway (port 80 → kind NodePort 30080):**
 
@@ -326,7 +332,7 @@ kubectl exec -n terraform-parse-service \
 
 > Output lives in an emptyDir — lost on pod restart. This is by design; the service is stateless.
 
-### Step 9: Observe in Grafana
+### Step 10: Observe in Grafana
 
 ```bash
 kubectl port-forward svc/grafana 3000:80 -n monitoring
