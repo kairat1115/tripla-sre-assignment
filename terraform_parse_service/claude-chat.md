@@ -223,3 +223,7 @@ add a detailed todo list to the plan, with all the phases and individual tasks n
 ---
 
 implement it all. when you’re done with a task or phase, mark it as completed in the plan document. do not stop until all tasks and phases are completed. do not add unnecessary comments or jsdocs, do not use any or unknown types. continuously run typecheck to make sure you’re not introducing new issues. make sure to update plan document with completed task or phase before proceding to the next task or phase.
+
+# add health endpoint
+
+lets add /health endpoint. it must return 200 if templates folder is not empty, otherwise 503

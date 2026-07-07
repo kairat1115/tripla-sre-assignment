@@ -68,6 +68,7 @@ func main() {
 	tfSvc := service.NewTerraformService(writers, templates, m)
 
 	mux := http.NewServeMux()
+	mux.Handle("GET /health", handler.NewHealthHandler(templates, l))
 	mux.Handle("POST /api/aws/v1/s3/buckets", s3handler.NewBucketHandler(tfSvc, l, m))
 
 	providerNames := make([]string, 0, len(cfg.Providers))
