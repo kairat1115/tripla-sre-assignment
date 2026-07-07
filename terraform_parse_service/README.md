@@ -4,7 +4,7 @@ HTTP service that renders Terraform HCL configurations from a JSON payload and w
 
 ## Requirements
 
-- Go 1.22+
+- Go 1.25+
 
 ## Build and run
 

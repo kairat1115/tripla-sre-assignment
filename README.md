@@ -383,4 +383,8 @@ kind delete cluster --name tripla
 kubectl rollout restart deployment/terraform-parse-service -n terraform-parse-service
 ```
 
-**No application-level health endpoint.** Probes use `tcpSocket` on port 8080 — confirms port open, not service ready. A failed `LoadTemplates()` after server start will pass the probe while the service returns 500s.
+---
+
+## AI usage
+
+I used Claude Code as an implementation assistant for the Go service, Terraform refactor, and Helm chart work. I guided the design, reviewed generated changes, tested the result, and made corrections where needed. See NOTES.md for details.
