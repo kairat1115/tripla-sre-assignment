@@ -78,7 +78,7 @@ resource "aws_s3_bucket_acl" "tripla_bucket_acl" {
   acl    = "private"
 }
 `
-	if string(got) != want {
+	if strings.ReplaceAll(string(got), "\r\n", "\n") != want {
 		t.Fatalf("file content mismatch\nwant:\n%s\ngot:\n%s", want, got)
 	}
 }

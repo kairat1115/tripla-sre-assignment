@@ -12,10 +12,14 @@ type HealthHandler struct {
 	logger    *zap.Logger
 }
 
+// NewHealthHandler builds a health handler that verifies providers and their
+// templates were loaded during startup.
 func NewHealthHandler(templates map[string]*template.Template, logger *zap.Logger) *HealthHandler {
 	return &HealthHandler{templates: templates, logger: logger}
 }
 
+// ServeHTTP returns 200 when at least one provider is configured and each
+// provider has parsed templates available.
 func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(h.templates) == 0 {
 		h.logger.Warn("health check failed", zap.String("reason", "no providers configured"))

@@ -1,3 +1,4 @@
+// Package handler contains shared HTTP handler contracts and response helpers.
 package handler
 
 import (
@@ -9,6 +10,9 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/service"
 )
 
+// Terraform is the handler-facing contract for rendering and managing generated
+// Terraform resources. It keeps HTTP packages independent from the concrete
+// service implementation.
 type Terraform interface {
 	Generate(ctx context.Context, g service.Generator) (string, error)
 	Read(ctx context.Context, l service.Locator) ([]byte, error)
@@ -16,6 +20,7 @@ type Terraform interface {
 	Delete(ctx context.Context, l service.Locator) error
 }
 
+// Result describes a JSON response and optional error produced by a handler.
 type Result struct {
 	Code int
 	Data any
@@ -23,6 +28,8 @@ type Result struct {
 	Msg  string
 }
 
+// Respond writes Result as JSON. When Err is set, Msg is returned as the error
+// body and Data is ignored.
 func Respond(w http.ResponseWriter, r Result) {
 	if r.Err != nil {
 		WriteError(w, r.Code, r.Msg)
@@ -33,12 +40,15 @@ func Respond(w http.ResponseWriter, r Result) {
 	_ = json.NewEncoder(w).Encode(r.Data)
 }
 
+// WriteError writes a consistent JSON error body.
 func WriteError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
+// Middleware normalizes standard-library routing errors into JSON so clients
+// always receive the same response shape from API endpoints.
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rw := &responseRecorder{header: w.Header().Clone(), code: http.StatusOK}

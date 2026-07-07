@@ -1,3 +1,4 @@
+// Package s3 exposes the AWS S3 bucket HTTP API.
 package s3
 
 import (
@@ -27,6 +28,7 @@ const tracerName = "handler.aws.s3"
 
 var bucketNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9\-\.]*[a-z0-9]$`)
 
+// bucketProperties mirrors payload.properties from the assignment API shape.
 type bucketProperties struct {
 	Region     string `json:"aws-region"`
 	ACL        string `json:"acl"`
@@ -38,7 +40,7 @@ func validateBucketName(name string) error {
 	case name == "":
 		return fmt.Errorf("missing required property: bucket-name")
 	case len(name) < 3 || len(name) > 63:
-		return fmt.Errorf("invalid bucket-name: must be 3–63 characters")
+		return fmt.Errorf("invalid bucket-name: must be 3-63 characters")
 	case !bucketNameRE.MatchString(name):
 		return fmt.Errorf("invalid bucket-name: must contain only lowercase letters, digits, hyphens, and dots, and start/end with a letter or digit")
 	case strings.Contains(name, ".."):
@@ -65,10 +67,12 @@ type bucketRequest struct {
 	} `json:"payload"`
 }
 
+// bucketResponse is returned after create/update calls and points to main.tf.
 type bucketResponse struct {
 	OutputPath string `json:"output_path"`
 }
 
+// bucketGenerator adapts an S3 bucket request to the generic Terraform renderer.
 type bucketGenerator struct {
 	props bucketProperties
 }
@@ -102,10 +106,14 @@ type BucketHandler struct {
 	m      *metrics.Metrics
 }
 
+// NewBucketHandler wires the S3 bucket API to Terraform rendering, logging, and
+// request metrics.
 func NewBucketHandler(svc handler.Terraform, logger *zap.Logger, m *metrics.Metrics) *BucketHandler {
 	return &BucketHandler{svc: svc, logger: logger, m: m}
 }
 
+// Create handles POST /api/aws/v1/s3/buckets and writes a new generated
+// Terraform file for the requested bucket.
 func (h *BucketHandler) Create() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -251,6 +259,7 @@ func (h *BucketHandler) Create() http.HandlerFunc {
 	}
 }
 
+// List handles GET /api/aws/v1/s3/buckets and returns generated bucket names.
 func (h *BucketHandler) List() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, span := otel.Tracer(tracerName).Start(r.Context(), "http.request",
@@ -282,6 +291,8 @@ func (h *BucketHandler) List() http.HandlerFunc {
 	}
 }
 
+// Get handles GET /api/aws/v1/s3/buckets/{bucket_name} and returns main.tf for
+// a generated bucket.
 func (h *BucketHandler) Get() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bucketName := r.PathValue("bucket_name")
@@ -333,6 +344,8 @@ func (h *BucketHandler) Get() http.HandlerFunc {
 	}
 }
 
+// Update handles PUT /api/aws/v1/s3/buckets/{bucket_name} by re-rendering the
+// Terraform file for an existing or new bucket path.
 func (h *BucketHandler) Update() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bucketName := r.PathValue("bucket_name")
@@ -429,6 +442,8 @@ func (h *BucketHandler) Update() http.HandlerFunc {
 	}
 }
 
+// Delete handles DELETE /api/aws/v1/s3/buckets/{bucket_name} and removes the
+// generated Terraform directory for that bucket.
 func (h *BucketHandler) Delete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bucketName := r.PathValue("bucket_name")

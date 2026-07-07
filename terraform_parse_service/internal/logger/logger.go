@@ -1,3 +1,4 @@
+// Package logger builds the service logger from runtime configuration.
 package logger
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
 )
 
+// New returns a production zap logger with configured level and static metadata.
 func New(cfg config.Config) (*zap.Logger, error) {
 	var level zapcore.Level
 	if err := level.UnmarshalText([]byte(cfg.Logger.Level)); err != nil {

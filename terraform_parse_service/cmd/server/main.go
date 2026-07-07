@@ -50,6 +50,8 @@ func main() {
 
 	writers := make(map[string]storage.Writer)
 	templates := make(map[string]*template.Template)
+	// Initialize provider dependencies before serving traffic so configuration,
+	// storage, and template failures surface during startup.
 	for provider, pcfg := range cfg.Providers {
 		w, err := storage.NewFSWriter(pcfg.StorageDir)
 		if err != nil {

@@ -15,10 +15,13 @@ import (
 
 const tracerName = "storage.filesystem"
 
+// FSWriter stores each generated resource as a directory containing main.tf.
 type FSWriter struct {
 	BaseDir string
 }
 
+// NewFSWriter creates the base directory if needed and returns a filesystem
+// storage writer rooted there.
 func NewFSWriter(baseDir string) (*FSWriter, error) {
 	if err := os.MkdirAll(baseDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create base dir: %w", err)
@@ -26,6 +29,8 @@ func NewFSWriter(baseDir string) (*FSWriter, error) {
 	return &FSWriter{BaseDir: baseDir}, nil
 }
 
+// Write stores content at BaseDir/name/main.tf after verifying the resolved
+// path stays inside BaseDir.
 func (w *FSWriter) Write(ctx context.Context, name string, content []byte) (string, error) {
 	_, span := otel.Tracer(tracerName).Start(ctx, "storage.write",
 		trace.WithAttributes(
@@ -71,6 +76,8 @@ func (w *FSWriter) Write(ctx context.Context, name string, content []byte) (stri
 	return path, nil
 }
 
+// Read loads BaseDir/name/main.tf after applying the same traversal protection
+// used by Write.
 func (w *FSWriter) Read(ctx context.Context, name string) ([]byte, error) {
 	_, span := otel.Tracer(tracerName).Start(ctx, "storage.read",
 		trace.WithAttributes(
@@ -104,6 +111,7 @@ func (w *FSWriter) Read(ctx context.Context, name string) ([]byte, error) {
 	return content, nil
 }
 
+// List returns directory names below BaseDir/prefix.
 func (w *FSWriter) List(ctx context.Context, prefix string) ([]string, error) {
 	_, span := otel.Tracer(tracerName).Start(ctx, "storage.list",
 		trace.WithAttributes(
@@ -139,6 +147,8 @@ func (w *FSWriter) List(ctx context.Context, prefix string) ([]string, error) {
 	return names, nil
 }
 
+// Delete removes BaseDir/name after verifying the resolved path stays inside
+// BaseDir.
 func (w *FSWriter) Delete(ctx context.Context, name string) error {
 	_, span := otel.Tracer(tracerName).Start(ctx, "storage.delete",
 		trace.WithAttributes(
@@ -171,6 +181,7 @@ func (w *FSWriter) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
+// isWithinBase rejects path traversal attempts before filesystem operations run.
 func isWithinBase(base, target string) bool {
 	base = filepath.Clean(base) + string(filepath.Separator)
 	return strings.HasPrefix(filepath.Clean(target)+string(filepath.Separator), base)

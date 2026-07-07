@@ -1,3 +1,4 @@
+// Package tracing configures OpenTelemetry tracing for the service.
 package tracing
 
 import (
@@ -15,6 +16,8 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
 )
 
+// New creates and installs the global OpenTelemetry tracer provider. The
+// returned shutdown function must be called during service shutdown.
 func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, func(context.Context) error, error) {
 	var exp sdktrace.SpanExporter
 	var err error

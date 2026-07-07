@@ -53,7 +53,7 @@ version: "dev"
 logger:
   level: "info"           # debug | info | warn | error
 tracing:
-  exporter: "stdout"      # stdout | otlp
+  exporter: "stdout"      # stdout | otlp_grpc
   endpoint: "localhost:4317"
   insecure: false
   sample_ratio: 1.0
@@ -65,7 +65,7 @@ providers:
     storage_dir: "./output/aws"
 ```
 
-Values support `${VAR}` interpolation — any unset variable falls back to the literal string in the file.
+Values support `${VAR}` interpolation - any unset variable falls back to the literal string in the file.
 
 | Environment variable | Effect |
 |---|---|

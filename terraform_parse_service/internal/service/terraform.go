@@ -1,3 +1,5 @@
+// Package service renders Terraform templates and delegates persistence to a
+// provider-specific storage backend.
 package service
 
 import (
@@ -23,27 +25,36 @@ import (
 
 const tracerName = "service.terraform"
 
+// Locator identifies a generated resource in provider-specific storage.
 type Locator interface {
 	Provider() string
 	StoragePath() string
 }
 
+// Generator provides everything required to render and store one Terraform
+// configuration.
 type Generator interface {
 	Locator
 	TemplateName() string
 	TemplateData() any
 }
 
+// TerraformService renders templates and manages generated Terraform files.
 type TerraformService struct {
 	writers   map[string]storage.Writer
 	templates map[string]*template.Template
 	m         *metrics.Metrics
 }
 
+// NewTerraformService creates a renderer with provider-keyed storage writers
+// and parsed template trees.
 func NewTerraformService(writers map[string]storage.Writer, templates map[string]*template.Template, m *metrics.Metrics) *TerraformService {
 	return &TerraformService{writers: writers, templates: templates, m: m}
 }
 
+// LoadTemplates parses every .tmpl file below dir into a single template tree.
+// Template names are their slash-separated relative paths, for example
+// s3/bucket.tf.tmpl.
 func LoadTemplates(dir string) (*template.Template, error) {
 	tmpl := template.New("").Funcs(sprig.TxtFuncMap())
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
@@ -67,6 +78,8 @@ func LoadTemplates(dir string) (*template.Template, error) {
 	return tmpl, nil
 }
 
+// Generate renders the template selected by g and writes the resulting main.tf
+// through the provider's storage writer.
 func (s *TerraformService) Generate(ctx context.Context, g Generator) (string, error) {
 	start := time.Now()
 	resource := resourceLabel(g.TemplateName())
@@ -123,6 +136,7 @@ func (s *TerraformService) Generate(ctx context.Context, g Generator) (string, e
 	return path, nil
 }
 
+// Read returns the generated Terraform file for the located resource.
 func (s *TerraformService) Read(ctx context.Context, l Locator) ([]byte, error) {
 	writer, ok := s.writers[l.Provider()]
 	if !ok {
@@ -131,6 +145,7 @@ func (s *TerraformService) Read(ctx context.Context, l Locator) ([]byte, error) 
 	return writer.Read(ctx, l.StoragePath())
 }
 
+// List returns generated resource names below the located storage path.
 func (s *TerraformService) List(ctx context.Context, l Locator) ([]string, error) {
 	writer, ok := s.writers[l.Provider()]
 	if !ok {
@@ -139,6 +154,7 @@ func (s *TerraformService) List(ctx context.Context, l Locator) ([]string, error
 	return writer.List(ctx, path.Dir(l.StoragePath()))
 }
 
+// Delete removes the generated Terraform files for the located resource.
 func (s *TerraformService) Delete(ctx context.Context, l Locator) error {
 	writer, ok := s.writers[l.Provider()]
 	if !ok {

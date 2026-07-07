@@ -1,3 +1,5 @@
+// Package metrics registers Prometheus metrics used by the HTTP and rendering
+// layers.
 package metrics
 
 import (
@@ -11,6 +13,7 @@ import (
 
 var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5}
 
+// Metrics groups the collectors shared across handlers and services.
 type Metrics struct {
 	reg                prometheus.Gatherer
 	GenerationTotal    *prometheus.CounterVec
@@ -20,6 +23,7 @@ type Metrics struct {
 	HTTPInFlight       *prometheus.GaugeVec
 }
 
+// New registers all service collectors in reg.
 func New(reg *prometheus.Registry) *Metrics {
 	factory := promauto.With(reg)
 	return &Metrics{
@@ -53,6 +57,8 @@ func New(reg *prometheus.Registry) *Metrics {
 	}
 }
 
+// Serve starts a Prometheus scrape endpoint on addr. When addr is empty it
+// listens on :9091.
 func (m *Metrics) Serve(addr string, log *zap.Logger) {
 	if addr == "" {
 		addr = ":9091"
