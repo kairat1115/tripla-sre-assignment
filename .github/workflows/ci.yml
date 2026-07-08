@@ -57,7 +57,7 @@ jobs:
         uses: azure/setup-helm@v5
 
       - name: Setup chart-testing
-        uses: helm/chart-testing-action@v2.8.0
+        uses: helm/chart-testing-action@v2.7.0
 
       - name: Install helm-unittest
         run: helm plugin install https://github.com/helm-unittest/helm-unittest --verify=false
@@ -77,7 +77,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: terraform_parse_service
           file: terraform_parse_service/Dockerfile
