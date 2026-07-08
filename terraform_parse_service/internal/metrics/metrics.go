@@ -16,20 +16,38 @@ var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5
 
 // Metrics groups the collectors shared across handlers and services.
 type Metrics struct {
-	reg                prometheus.Gatherer
-	GenerationTotal    *prometheus.CounterVec
+	reg prometheus.Gatherer
+	// GenerationTotal counts Terraform generation attempts by provider,
+	// resource, and status.
+	GenerationTotal *prometheus.CounterVec
+	// GenerationDuration observes Terraform generation duration in seconds.
 	GenerationDuration *prometheus.HistogramVec
-	RenderedBytes      *prometheus.HistogramVec
-	HTTPRequestsTotal  *prometheus.CounterVec
-	HTTPDuration       *prometheus.HistogramVec
-	HTTPInFlight       *prometheus.GaugeVec
+	// RenderedBytes observes rendered Terraform output size in bytes.
+	RenderedBytes *prometheus.HistogramVec
+	// HTTPRequestsTotal counts instrumented HTTP requests by method, route, and
+	// status code.
+	HTTPRequestsTotal *prometheus.CounterVec
+	// HTTPDuration observes instrumented HTTP request duration in seconds.
+	HTTPDuration *prometheus.HistogramVec
+	// HTTPInFlight tracks currently active instrumented HTTP requests.
+	HTTPInFlight *prometheus.GaugeVec
+	// ResourceOperations counts resource API operations by provider, service,
+	// resource, operation, and status.
 	ResourceOperations *prometheus.CounterVec
-	ResourceDuration   *prometheus.HistogramVec
-	StorageOperations  *prometheus.CounterVec
-	StorageDuration    *prometheus.HistogramVec
-	TemplateReloads    *prometheus.CounterVec
-	TemplateDuration   *prometheus.HistogramVec
-	TemplatesLoaded    *prometheus.GaugeVec
+	// ResourceDuration observes resource API operation duration in seconds.
+	ResourceDuration *prometheus.HistogramVec
+	// StorageOperations counts storage backend operations by provider,
+	// operation, and status.
+	StorageOperations *prometheus.CounterVec
+	// StorageDuration observes storage backend operation duration in seconds.
+	StorageDuration *prometheus.HistogramVec
+	// TemplateReloads counts provider template reload attempts by status.
+	TemplateReloads *prometheus.CounterVec
+	// TemplateDuration observes provider template reload duration in seconds.
+	TemplateDuration *prometheus.HistogramVec
+	// TemplatesLoaded reports the current number of parsed templates per
+	// provider.
+	TemplatesLoaded *prometheus.GaugeVec
 }
 
 // New registers all service collectors in reg.

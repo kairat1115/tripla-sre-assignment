@@ -7,7 +7,7 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource/aws/s3"
 )
 
-// Router registers all AWS service routes.
+// Router delegates AWS provider route registration to AWS service routers.
 type Router struct {
 	svc resource.Terraform
 	m   *metrics.Metrics
@@ -18,7 +18,7 @@ func NewRouter(svc resource.Terraform, m *metrics.Metrics) *Router {
 	return &Router{svc: svc, m: m}
 }
 
-// RegisterRoutes registers AWS service routers on r.
+// RegisterRoutes registers all AWS service routers on r.
 func (rt *Router) RegisterRoutes(r resource.Router) {
 	s3.NewRouter(rt.svc, rt.m).RegisterRoutes(r)
 }

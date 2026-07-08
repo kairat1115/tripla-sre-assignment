@@ -12,40 +12,60 @@ import (
 // ProviderConfig describes where a provider's templates are loaded from, how
 // often they are polled for changes, and where generated Terraform is written.
 type ProviderConfig struct {
-	TemplatesDir          string `yaml:"templates_dir"`
+	// TemplatesDir is the provider template root scanned for .tmpl files.
+	TemplatesDir string `yaml:"templates_dir"`
+	// TemplatesPollInterval controls how often TemplatesDir is checked for
+	// changes. When empty, the service uses the application default.
 	TemplatesPollInterval string `yaml:"templates_poll_interval"`
-	StorageDir            string `yaml:"storage_dir"`
+	// StorageDir is the provider output root for generated Terraform files.
+	StorageDir string `yaml:"storage_dir"`
 }
 
 // LoggerConfig controls zap log level and static metadata attached to every log.
 type LoggerConfig struct {
-	Level    string            `yaml:"level"`
+	// Level is the zap log level name. Invalid values fall back to info.
+	Level string `yaml:"level"`
+	// Metadata contains extra static fields attached to every service log.
 	Metadata map[string]string `yaml:"metadata"`
 }
 
 // TracingConfig controls OpenTelemetry trace export and sampling.
 type TracingConfig struct {
-	Exporter    string  `yaml:"exporter"`
-	Endpoint    string  `yaml:"endpoint"`
-	Insecure    bool    `yaml:"insecure"`
+	// Exporter selects the trace exporter. Supported values are stdout and
+	// otlp_grpc.
+	Exporter string `yaml:"exporter"`
+	// Endpoint is the OTLP/gRPC collector endpoint used by the otlp_grpc exporter.
+	Endpoint string `yaml:"endpoint"`
+	// Insecure disables TLS for the OTLP/gRPC exporter.
+	Insecure bool `yaml:"insecure"`
+	// SampleRatio is the trace sampling ratio, from 0.0 to 1.0.
 	SampleRatio float64 `yaml:"sample_ratio"`
 }
 
 // MetricsConfig configures the Prometheus scrape endpoint.
 type MetricsConfig struct {
+	// Addr is the bind address for the Prometheus /metrics server.
 	Addr string `yaml:"addr"`
 }
 
 // Config is the complete runtime configuration for the HTTP service.
 type Config struct {
-	ListenAddr  string                    `yaml:"listen_addr"`
-	ServiceName string                    `yaml:"service_name"`
-	Environment string                    `yaml:"environment"`
-	Version     string                    `yaml:"version"`
-	Logger      LoggerConfig              `yaml:"logger"`
-	Tracing     TracingConfig             `yaml:"tracing"`
-	Metrics     MetricsConfig             `yaml:"metrics"`
-	Providers   map[string]ProviderConfig `yaml:"providers"`
+	// ListenAddr is the bind address for the public HTTP API.
+	ListenAddr string `yaml:"listen_addr"`
+	// ServiceName is attached to logs, traces, and runtime metadata.
+	ServiceName string `yaml:"service_name"`
+	// Environment identifies the deployment environment, such as dev or prod.
+	Environment string `yaml:"environment"`
+	// Version identifies the running build, usually a release version or git SHA.
+	Version string `yaml:"version"`
+	// Logger configures structured logging.
+	Logger LoggerConfig `yaml:"logger"`
+	// Tracing configures OpenTelemetry tracing.
+	Tracing TracingConfig `yaml:"tracing"`
+	// Metrics configures the Prometheus metrics endpoint.
+	Metrics MetricsConfig `yaml:"metrics"`
+	// Providers maps provider keys, such as aws, to provider runtime settings.
+	Providers map[string]ProviderConfig `yaml:"providers"`
 }
 
 // Load reads the YAML configuration from CONFIG_PATH or configs/config.yaml.

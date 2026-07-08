@@ -26,18 +26,24 @@ type Generator interface {
 
 // Terraform is the resource-handler-facing rendering and storage contract.
 type Terraform interface {
+	// Generate renders and stores Terraform for g, returning the output path.
 	Generate(ctx context.Context, g Generator) (string, error)
+	// Read returns generated Terraform content for l.
 	Read(ctx context.Context, l Locator) ([]byte, error)
+	// List returns generated resource names below l's resource collection.
 	List(ctx context.Context, l Locator) ([]string, error)
+	// Delete removes generated Terraform content for l.
 	Delete(ctx context.Context, l Locator) error
 }
 
 // Router is the route registration surface resource handlers need.
 type Router interface {
+	// Handle registers h for method and path pattern.
 	Handle(method, pattern string, h http.Handler)
 }
 
 // HTTPResource registers all HTTP routes for one resource family.
 type HTTPResource interface {
+	// RegisterRoutes registers this resource family's routes on r.
 	RegisterRoutes(r Router)
 }

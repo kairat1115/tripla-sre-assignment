@@ -12,7 +12,8 @@ type TemplateStatus interface {
 	TemplateCounts() map[string]int
 }
 
-// HealthHandler reports whether providers have parsed templates available.
+// HealthHandler reports whether providers have parsed templates available. It
+// logs failing health checks but leaves successful probes silent.
 type HealthHandler struct {
 	status TemplateStatus
 	logger *zap.Logger
@@ -24,7 +25,7 @@ func NewHealthHandler(status TemplateStatus, logger *zap.Logger) *HealthHandler 
 }
 
 // ServeHTTP returns 200 when at least one provider is configured and each
-// provider has templates available.
+// provider has templates available; otherwise it returns 503.
 func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	counts := h.status.TemplateCounts()
 	if len(counts) == 0 {

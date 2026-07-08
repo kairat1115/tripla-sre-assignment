@@ -12,12 +12,15 @@ import (
 
 type telemetryKey struct{}
 
+// telemetryContext stores request-scoped log fields that handlers add after
+// middleware creates the request span.
 type telemetryContext struct {
 	mu      sync.Mutex
 	fields  []zap.Field
 	indexes map[string]int
 }
 
+// withTelemetry attaches mutable request telemetry state to ctx.
 func withTelemetry(ctx context.Context) context.Context {
 	return context.WithValue(ctx, telemetryKey{}, &telemetryContext{indexes: make(map[string]int)})
 }
@@ -65,6 +68,8 @@ func RecordError(ctx context.Context, slug string, err error) {
 	)
 }
 
+// telemetryFields returns a snapshot of request-scoped fields collected by
+// handlers.
 func telemetryFields(ctx context.Context) []zap.Field {
 	t, ok := ctx.Value(telemetryKey{}).(*telemetryContext)
 	if !ok {
@@ -78,6 +83,8 @@ func telemetryFields(ctx context.Context) []zap.Field {
 	return fields
 }
 
+// addTelemetryFields appends request log fields, replacing earlier fields with
+// the same key to keep the final request log wide but non-duplicative.
 func addTelemetryFields(ctx context.Context, fields ...zap.Field) {
 	t, ok := ctx.Value(telemetryKey{}).(*telemetryContext)
 	if !ok {

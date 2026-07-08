@@ -28,7 +28,7 @@ func NewRouter(svc resource.Terraform, m *metrics.Metrics) *Router {
 	return &Router{svc: svc, m: m}
 }
 
-// RegisterRoutes registers all S3 bucket routes on r.
+// RegisterRoutes registers S3 bucket collection and item routes on r.
 func (rt *Router) RegisterRoutes(r resource.Router) {
 	r.Handle(http.MethodGet, "/api/aws/v1/s3/buckets", rt.List())
 	r.Handle(http.MethodPost, "/api/aws/v1/s3/buckets", rt.Create())
@@ -105,6 +105,8 @@ func (rt *Router) Update() http.HandlerFunc {
 	}
 }
 
+// save handles create and update requests that render bucket Terraform from a
+// JSON payload.
 func (rt *Router) save(w http.ResponseWriter, r *http.Request, operation, pathBucketName string, status int) {
 	ctx := r.Context()
 	start := time.Now()
@@ -180,10 +182,13 @@ func (rt *Router) Delete() http.HandlerFunc {
 
 var _ resource.HTTPResource = (*Router)(nil)
 
+// recordOperation records the resource-level API metric for one bucket request.
 func (rt *Router) recordOperation(operation, status string, start time.Time) {
 	rt.m.ObserveResourceOperation("aws", "s3", "aws_s3_bucket", operation, status, time.Since(start))
 }
 
+// annotateBucketRequest adds stable request dimensions to the active span and
+// final request log.
 func annotateBucketRequest(ctx context.Context, operation, bucketName string) {
 	attrs := []attribute.KeyValue{
 		attribute.String("terraform.provider.name", "aws"),
@@ -216,6 +221,8 @@ func annotateBucketRequest(ctx context.Context, operation, bucketName string) {
 	httpapi.AddSpanEvent(ctx, "resource.request.start", attrs...)
 }
 
+// annotateBucketProperties adds payload-derived bucket dimensions to the active
+// span and final request log.
 func annotateBucketProperties(ctx context.Context, props Properties) {
 	attrs := []attribute.KeyValue{
 		attribute.String("terraform.provider.aws.s3.bucket.region", props.Region),

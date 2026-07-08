@@ -8,6 +8,7 @@ import (
 
 // Generator adapts S3 bucket properties to the generic Terraform renderer.
 type Generator struct {
+	// Props contains the validated S3 bucket request properties.
 	Props Properties
 }
 
@@ -32,18 +33,26 @@ func (g Generator) TemplateData() any {
 
 // TemplateData is the typed input passed to the S3 bucket Terraform template.
 type TemplateData struct {
-	Region       string
-	ACL          string
-	BucketName   string
+	// Region is the AWS region written to the provider block.
+	Region string
+	// ACL is the canned ACL assigned to the bucket.
+	ACL string
+	// BucketName is the AWS S3 bucket name.
+	BucketName string
+	// ResourceName is the Terraform-safe resource label derived from BucketName.
 	ResourceName string
 }
 
+// resourceLocator identifies either the S3 bucket collection or one bucket in
+// provider storage.
 type resourceLocator struct {
 	BucketName string
 }
 
+// Provider returns the provider key used to select storage.
 func (l resourceLocator) Provider() string { return "aws" }
 
+// StoragePath returns the provider-relative collection or bucket output path.
 func (l resourceLocator) StoragePath() string {
 	if l.BucketName == "" {
 		return "s3/"

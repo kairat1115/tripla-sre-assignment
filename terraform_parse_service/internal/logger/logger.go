@@ -10,7 +10,8 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
 )
 
-// New returns a production zap logger with configured level and static metadata.
+// New returns a production zap logger with configured level and static
+// metadata. Invalid configured levels fall back to info.
 func New(cfg config.Config) (*zap.Logger, error) {
 	var level zapcore.Level
 	if err := level.UnmarshalText([]byte(cfg.Logger.Level)); err != nil {

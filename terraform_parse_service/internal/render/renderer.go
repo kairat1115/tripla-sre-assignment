@@ -47,8 +47,9 @@ func New(stores map[string]store.Store, templates map[string]*template.Template,
 	return &Renderer{stores: stores, templates: templates, metrics: m}
 }
 
-// LoadTemplates parses every .tmpl file under dir into one template tree. Each
-// template is registered under its slash-separated path relative to dir.
+// LoadTemplates parses every .tmpl file under dir into one Sprig-enabled
+// template tree. Each template is registered under its slash-separated path
+// relative to dir.
 func LoadTemplates(dir string) (*template.Template, error) {
 	tmpl := template.New("").Funcs(sprig.TxtFuncMap())
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
@@ -72,8 +73,9 @@ func LoadTemplates(dir string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-// TemplateSignature returns a content hash for every .tmpl file below dir. It
-// changes when a template is added, removed, renamed, or edited.
+// TemplateSignature returns a hash of every .tmpl file's relative path and
+// content below dir. It changes when a template is added, removed, renamed, or
+// edited.
 func TemplateSignature(dir string) (string, error) {
 	files := make([]string, 0)
 	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
@@ -231,7 +233,8 @@ func (r *Renderer) Read(ctx context.Context, l resource.Locator) ([]byte, error)
 	return content, nil
 }
 
-// List returns resource names under the located resource prefix.
+// List returns generated resource names under the directory containing the
+// located resource path.
 func (r *Renderer) List(ctx context.Context, l resource.Locator) ([]string, error) {
 	ctx, span := otel.Tracer(tracerName).Start(ctx, "render.list",
 		trace.WithAttributes(
@@ -289,6 +292,8 @@ func (r *Renderer) Delete(ctx context.Context, l resource.Locator) error {
 	return nil
 }
 
+// recordSpanError records err on span using the service's structured exception
+// attributes.
 func recordSpanError(span trace.Span, slug string, err error) {
 	span.SetStatus(codes.Error, err.Error())
 	span.RecordError(err)
@@ -299,6 +304,8 @@ func recordSpanError(span trace.Span, slug string, err error) {
 	)
 }
 
+// resourceLabel converts a provider-relative template name into a stable metric
+// label.
 func resourceLabel(templateName string) string {
 	name := strings.TrimSuffix(templateName, ".tf.tmpl")
 	return strings.ReplaceAll(name, "/", "_")

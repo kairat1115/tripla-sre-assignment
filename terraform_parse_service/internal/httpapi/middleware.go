@@ -55,8 +55,10 @@ func (r *Router) Handler() http.Handler {
 	return NormalizeErrors(r.mux)
 }
 
-// Instrument wraps a handler with request duration, in-flight, total request
-// metrics, request logging, and an OpenTelemetry server span.
+// Instrument wraps a handler with request duration, in-flight and total request
+// metrics, request logging, and an OpenTelemetry server span. It logs
+// successful and client-error requests at info and server-error requests at
+// error.
 func Instrument(m *metrics.Metrics, logger *zap.Logger, method, route string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -145,6 +147,8 @@ func NormalizeErrors(next http.Handler) http.Handler {
 	})
 }
 
+// statusRecorder captures status code and body size while forwarding writes to
+// the real response writer.
 type statusRecorder struct {
 	http.ResponseWriter
 	status       int
@@ -170,6 +174,8 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// bufferedRecorder buffers mux-generated responses so NormalizeErrors can
+// replace default error bodies with the service JSON shape.
 type bufferedRecorder struct {
 	header http.Header
 	status int

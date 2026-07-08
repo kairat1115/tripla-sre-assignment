@@ -10,8 +10,11 @@ var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9\-\.]*[a-z0-9]$`)
 
 // Properties mirrors payload.properties for the S3 bucket API.
 type Properties struct {
-	Region     string `json:"aws-region"`
-	ACL        string `json:"acl"`
+	// Region is the requested AWS region from payload.properties.aws-region.
+	Region string `json:"aws-region"`
+	// ACL is the requested canned ACL from payload.properties.acl.
+	ACL string `json:"acl"`
+	// BucketName is the requested bucket name from payload.properties.bucket-name.
 	BucketName string `json:"bucket-name"`
 }
 
@@ -53,5 +56,6 @@ type Request struct {
 
 // Response reports where the generated Terraform file was written.
 type Response struct {
+	// OutputPath is the filesystem path to the rendered main.tf file.
 	OutputPath string `json:"output_path"`
 }

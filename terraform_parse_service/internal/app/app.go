@@ -26,8 +26,8 @@ import (
 
 const tracerName = "app"
 
-// App groups the API and metrics servers so they can be started and stopped
-// together.
+// App owns the API server, metrics server, renderer, and template polling
+// lifecycle.
 type App struct {
 	apiServer       *http.Server
 	metricsServer   *http.Server
@@ -37,6 +37,7 @@ type App struct {
 	metrics         *metrics.Metrics
 }
 
+// templateSource describes one provider template directory watched for reloads.
 type templateSource struct {
 	provider string
 	dir      string
@@ -71,7 +72,8 @@ func New(cfg config.Config, logger *zap.Logger) (*App, error) {
 }
 
 // Run starts the API server, metrics server, and template polling loops. It
-// blocks until ctx is canceled or a server exits with an unexpected error.
+// blocks until ctx is canceled or a server exits unexpectedly, then performs a
+// graceful server shutdown.
 func (a *App) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -93,7 +95,8 @@ func (a *App) Run(ctx context.Context) error {
 	}
 }
 
-// Shutdown gracefully stops both HTTP servers using a bounded timeout.
+// Shutdown gracefully stops the API and metrics HTTP servers using a bounded
+// timeout.
 func (a *App) Shutdown(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -108,6 +111,7 @@ func (a *App) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// serveHTTP runs one HTTP server and reports only unexpected exits.
 func serveHTTP(errCh chan<- error, name string, server *http.Server, logger *zap.Logger) {
 	logger.Info(name+" server starting", zap.String("addr", server.Addr))
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -115,6 +119,8 @@ func serveHTTP(errCh chan<- error, name string, server *http.Server, logger *zap
 	}
 }
 
+// newRenderer creates provider stores, loads initial templates, and returns the
+// template sources that should be polled after startup.
 func newRenderer(cfg config.Config, m *metrics.Metrics) (*render.Renderer, []templateSource, error) {
 	stores := make(map[string]store.Store, len(cfg.Providers))
 	templates := make(map[string]*template.Template, len(cfg.Providers))
@@ -141,12 +147,15 @@ func newRenderer(cfg config.Config, m *metrics.Metrics) (*render.Renderer, []tem
 	return render.New(stores, templates, m), sources, nil
 }
 
+// watchTemplates starts one polling goroutine for each configured provider.
 func (a *App) watchTemplates(ctx context.Context) {
 	for _, source := range a.templateSources {
 		go a.watchProviderTemplates(ctx, source)
 	}
 }
 
+// watchProviderTemplates reloads a provider only when its template signature
+// changes.
 func (a *App) watchProviderTemplates(ctx context.Context, source templateSource) {
 	signature, err := render.TemplateSignature(source.dir)
 	if err != nil {
@@ -197,6 +206,8 @@ func (a *App) watchProviderTemplates(ctx context.Context, source templateSource)
 	}
 }
 
+// reloadProviderTemplates records trace and metric data for one template reload
+// attempt.
 func (a *App) reloadProviderTemplates(ctx context.Context, source templateSource, currentSignature, nextSignature string) error {
 	start := time.Now()
 	ctx, span := otel.Tracer(tracerName).Start(ctx, "terraform.provider.template.reload",
@@ -234,6 +245,8 @@ func (a *App) reloadProviderTemplates(ctx context.Context, source templateSource
 	return nil
 }
 
+// recordTemplateWatchError emits a short error span for polling failures that
+// happen before a reload attempt starts.
 func (a *App) recordTemplateWatchError(ctx context.Context, spanName string, source templateSource, slug string, err error) {
 	_, span := otel.Tracer(tracerName).Start(ctx, spanName,
 		trace.WithAttributes(templateSourceAttributes(source)...),
@@ -249,6 +262,8 @@ func (a *App) recordTemplateWatchError(ctx context.Context, spanName string, sou
 	)
 }
 
+// templateSourceAttributes returns shared trace attributes for template polling
+// and reload spans.
 func templateSourceAttributes(source templateSource, extra ...attribute.KeyValue) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attribute.String("terraform.provider.name", source.provider),
@@ -258,6 +273,8 @@ func templateSourceAttributes(source templateSource, extra ...attribute.KeyValue
 	return append(attrs, extra...)
 }
 
+// templatesPollInterval returns the configured provider poll interval or the
+// service default when the value is empty or invalid.
 func templatesPollInterval(pcfg config.ProviderConfig) time.Duration {
 	if pcfg.TemplatesPollInterval == "" {
 		return 5 * time.Second

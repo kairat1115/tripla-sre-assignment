@@ -17,8 +17,9 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
 )
 
-// New creates and installs the global OpenTelemetry tracer provider. The
-// returned provider must be shut down during service shutdown.
+// New creates and installs the global OpenTelemetry tracer provider, resource,
+// sampler, exporter, and W3C propagators. The returned provider must be shut
+// down during service shutdown so queued spans can flush.
 func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, error) {
 	var exp sdktrace.SpanExporter
 	var err error

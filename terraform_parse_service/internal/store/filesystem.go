@@ -17,6 +17,7 @@ const tracerName = "store.filesystem"
 
 // FSStore stores each generated resource as a directory containing main.tf.
 type FSStore struct {
+	// BaseDir is the filesystem root all resource keys must stay within.
 	BaseDir string
 }
 
@@ -182,6 +183,8 @@ func (s *FSStore) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// writeFileReplace writes content through a temporary file before renaming it
+// into place.
 func writeFileReplace(path string, content []byte) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".main.tf-*")
@@ -208,6 +211,7 @@ func writeFileReplace(path string, content []byte) error {
 	return os.Rename(tmpName, path)
 }
 
+// safeJoin joins path parts under base and rejects paths that escape base.
 func safeJoin(base string, parts ...string) (string, error) {
 	baseAbs, err := filepath.Abs(base)
 	if err != nil {
@@ -229,6 +233,8 @@ func safeJoin(base string, parts ...string) (string, error) {
 	return filepath.Clean(target), nil
 }
 
+// markStoreError records err on span using the service's structured exception
+// attributes, then returns err for inline use.
 func markStoreError(span trace.Span, slug string, err error) error {
 	span.SetStatus(codes.Error, err.Error())
 	span.RecordError(err)
