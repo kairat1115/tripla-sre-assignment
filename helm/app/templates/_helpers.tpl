@@ -5,7 +5,8 @@
 {{- define "app.labels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{- include "app.selectorLabels" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 
 {{- define "app.selectorLabels" -}}
