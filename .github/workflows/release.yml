@@ -56,6 +56,8 @@ jobs:
   quality:
     name: quality
     uses: ./.github/workflows/ci.yml
+    with:
+      run_container: false
 
   service:
     name: service (${{ matrix.arch }})

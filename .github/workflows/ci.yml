@@ -7,6 +7,12 @@ on:
       - main
   workflow_dispatch:
   workflow_call:
+    inputs:
+      run_container:
+        description: Run the CI-only container build.
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -68,6 +74,7 @@ jobs:
   container:
     name: container
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_call' || inputs.run_container }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
