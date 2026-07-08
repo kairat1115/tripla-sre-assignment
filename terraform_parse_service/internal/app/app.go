@@ -142,7 +142,6 @@ func newRenderer(cfg config.Config, m *metrics.Metrics) (*render.Renderer, []tem
 
 func (a *App) watchTemplates(ctx context.Context) {
 	for _, source := range a.templateSources {
-		source := source
 		go a.watchProviderTemplates(ctx, source)
 	}
 }
