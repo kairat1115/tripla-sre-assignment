@@ -1,15 +1,22 @@
-SHA := $(shell git rev-parse --short HEAD)
-IMAGE := terraform-parse-service:$(SHA)
-CLUSTER := tripla
+SHA              := $(shell git rev-parse --short HEAD)
+IMAGE_REPOSITORY ?= terraform-parse-service
+IMAGE_TAG        ?= $(SHA)
+IMAGE            := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
+
+CLUSTER       := tripla
 NAMESPACE_APP := terraform-parse-service
 NAMESPACE_MON := monitoring
+APP_RELEASE   := terraform-parse-service
 
-# Pinned chart versions
-CHART_TEMPO    := oci://ghcr.io/grafana-community/helm-charts/tempo
-CHART_LOKI     := oci://ghcr.io/grafana-community/helm-charts/loki
-CHART_GRAFANA  := oci://ghcr.io/grafana-community/helm-charts/grafana
-CHART_ALLOY    := grafana/alloy
-CHART_PROM     := oci://ghcr.io/prometheus-community/charts/prometheus
+DASHBOARD_CONFIGMAP := grafana-dashboard-terraform-parse-service
+DASHBOARD_FILE      := terraform_parse_service/deploy/grafana/provisioning/dashboards/service.json
+
+CHART_TEMPO   := oci://ghcr.io/grafana-community/helm-charts/tempo
+CHART_LOKI    := oci://ghcr.io/grafana-community/helm-charts/loki
+CHART_GRAFANA := oci://ghcr.io/grafana-community/helm-charts/grafana
+CHART_ALLOY   := grafana/alloy
+CHART_PROM    := oci://ghcr.io/prometheus-community/charts/prometheus
+
 VERSION_TEMPO   := 2.2.3
 VERSION_LOKI    := 18.4.0
 VERSION_GRAFANA := 12.7.2
@@ -17,14 +24,12 @@ VERSION_ALLOY   := 1.10.0
 VERSION_PROM    := 29.14.0
 
 .PHONY: cluster-up cluster-down \
-        image-build image-load \
-        istio-install istio-patch namespace-setup \
-        metrics-server \
-        obs-repos obs-tempo obs-loki obs-prometheus obs-alloy obs-grafana obs \
-        app-dep app-install app-upgrade app \
-        port-forward-grafana port-forward-app \
-        teardown-app teardown-obs teardown-cluster teardown \
-        test
+	image-build image-load \
+	istio-install istio-patch namespace-setup metrics-server \
+	obs-repos obs-tempo obs-loki obs-prometheus obs-alloy grafana-dashboard obs-grafana obs \
+	app-dep app-install app-upgrade app app-render \
+	port-forward-grafana port-forward-app \
+	test teardown-app teardown-obs teardown-cluster teardown
 
 ## ── Cluster ──────────────────────────────────────────────────────────────────
 
@@ -42,7 +47,7 @@ image-build:
 
 image-load: image-build
 	kind load docker-image $(IMAGE) --name $(CLUSTER)
-	@echo "Loaded: $(IMAGE)"
+	@echo "Loaded $(IMAGE)"
 
 ## ── Istio ────────────────────────────────────────────────────────────────────
 
@@ -130,7 +135,13 @@ obs-alloy:
 	  -f deploy/alloy-values.yaml
 	kubectl rollout status daemonset/alloy -n $(NAMESPACE_MON)
 
-obs-grafana:
+grafana-dashboard:
+	kubectl create configmap $(DASHBOARD_CONFIGMAP) \
+	  --from-file=service.json=$(DASHBOARD_FILE) \
+	  --namespace $(NAMESPACE_MON) \
+	  --dry-run=client -o yaml | kubectl apply -f -
+
+obs-grafana: grafana-dashboard
 	helm upgrade --install grafana $(CHART_GRAFANA) \
 	  --version $(VERSION_GRAFANA) \
 	  --namespace $(NAMESPACE_MON) \
@@ -145,24 +156,32 @@ app-dep:
 	helm dependency update helm/terraform-parse-service
 
 app-install: app-dep
-	helm install terraform-parse-service helm/terraform-parse-service \
+	helm install $(APP_RELEASE) helm/terraform-parse-service \
 	  -f helm/terraform-parse-service/values.yaml \
 	  -f helm/terraform-parse-service/values-prod.yaml \
-	  -f deploy/values-kind.yaml \
-	  --set app.image.tag=$(SHA) \
+	  --set app.image.repository=$(IMAGE_REPOSITORY) \
+	  --set app.image.tag=$(IMAGE_TAG) \
 	  --namespace $(NAMESPACE_APP)
-	kubectl rollout status deployment/terraform-parse-service -n $(NAMESPACE_APP)
+	kubectl rollout status deployment/$(APP_RELEASE) -n $(NAMESPACE_APP)
 
 app-upgrade: app-dep
-	helm upgrade terraform-parse-service helm/terraform-parse-service \
+	helm upgrade --install $(APP_RELEASE) helm/terraform-parse-service \
 	  -f helm/terraform-parse-service/values.yaml \
 	  -f helm/terraform-parse-service/values-prod.yaml \
-	  -f deploy/values-kind.yaml \
-	  --set app.image.tag=$(SHA) \
+	  --set app.image.repository=$(IMAGE_REPOSITORY) \
+	  --set app.image.tag=$(IMAGE_TAG) \
 	  --namespace $(NAMESPACE_APP)
-	kubectl rollout status deployment/terraform-parse-service -n $(NAMESPACE_APP)
+	kubectl rollout status deployment/$(APP_RELEASE) -n $(NAMESPACE_APP)
 
 app: app-install
+
+app-render: app-dep
+	helm template $(APP_RELEASE) helm/terraform-parse-service \
+	  -f helm/terraform-parse-service/values.yaml \
+	  -f helm/terraform-parse-service/values-prod.yaml \
+	  --set app.image.repository=$(IMAGE_REPOSITORY) \
+	  --set app.image.tag=$(IMAGE_TAG) \
+	  --namespace $(NAMESPACE_APP)
 
 ## ── Port-forward ─────────────────────────────────────────────────────────────
 
@@ -170,13 +189,13 @@ port-forward-grafana:
 	kubectl port-forward svc/grafana 3000:80 -n $(NAMESPACE_MON)
 
 port-forward-app:
-	kubectl port-forward svc/terraform-parse-service 8080:8080 -n $(NAMESPACE_APP)
+	kubectl port-forward svc/$(APP_RELEASE) 8080:8080 -n $(NAMESPACE_APP)
 
 ## ── Test ─────────────────────────────────────────────────────────────────────
 
 CURL := curl -s \
   -H "Host: terraform-parse-service.example.com" \
-  -H "release: terraform-parse-service" \
+  -H "release: $(APP_RELEASE)" \
   -H "Content-Type: application/json"
 
 test:
@@ -196,10 +215,11 @@ test:
 ## ── Teardown ─────────────────────────────────────────────────────────────────
 
 teardown-app:
-	helm uninstall terraform-parse-service -n $(NAMESPACE_APP) || true
+	helm uninstall $(APP_RELEASE) -n $(NAMESPACE_APP) || true
 
 teardown-obs:
 	helm uninstall grafana alloy prometheus loki tempo -n $(NAMESPACE_MON) || true
+	kubectl delete configmap $(DASHBOARD_CONFIGMAP) -n $(NAMESPACE_MON) --ignore-not-found
 
 teardown-cluster:
 	kind delete cluster --name $(CLUSTER)

@@ -4,15 +4,17 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	uberconfig "go.uber.org/config"
 )
 
-// ProviderConfig describes where a provider's Terraform templates are loaded
-// from and where generated Terraform files are written.
+// ProviderConfig describes where a provider's templates are loaded from, how
+// often they are polled for changes, and where generated Terraform is written.
 type ProviderConfig struct {
-	TemplatesDir string `yaml:"templates_dir"`
-	StorageDir   string `yaml:"storage_dir"`
+	TemplatesDir          string `yaml:"templates_dir"`
+	TemplatesPollInterval string `yaml:"templates_poll_interval"`
+	StorageDir            string `yaml:"storage_dir"`
 }
 
 // LoggerConfig controls zap log level and static metadata attached to every log.
@@ -67,5 +69,54 @@ func Load() (Config, error) {
 	if cfg.ServiceName == "" {
 		cfg.ServiceName = "terraform-parse-service"
 	}
+	if cfg.ListenAddr == "" {
+		cfg.ListenAddr = ":8080"
+	}
+	if cfg.Tracing.Exporter == "" {
+		cfg.Tracing.Exporter = "stdout"
+	}
+	if cfg.Metrics.Addr == "" {
+		cfg.Metrics.Addr = ":9091"
+	}
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// Validate checks required fields and supported option values after defaults are
+// applied.
+func (cfg Config) Validate() error {
+	if cfg.ListenAddr == "" {
+		return fmt.Errorf("listen_addr is required")
+	}
+	if cfg.Tracing.SampleRatio < 0 || cfg.Tracing.SampleRatio > 1 {
+		return fmt.Errorf("tracing.sample_ratio must be between 0 and 1")
+	}
+	switch cfg.Tracing.Exporter {
+	case "stdout", "otlp_grpc":
+	default:
+		return fmt.Errorf("unknown trace exporter %q: supported values are stdout, otlp_grpc", cfg.Tracing.Exporter)
+	}
+	if len(cfg.Providers) == 0 {
+		return fmt.Errorf("at least one provider is required")
+	}
+	for provider, pcfg := range cfg.Providers {
+		if pcfg.TemplatesDir == "" {
+			return fmt.Errorf("providers.%s.templates_dir is required", provider)
+		}
+		if pcfg.StorageDir == "" {
+			return fmt.Errorf("providers.%s.storage_dir is required", provider)
+		}
+		if pcfg.TemplatesPollInterval != "" {
+			interval, err := time.ParseDuration(pcfg.TemplatesPollInterval)
+			if err != nil {
+				return fmt.Errorf("providers.%s.templates_poll_interval is invalid: %w", provider, err)
+			}
+			if interval <= 0 {
+				return fmt.Errorf("providers.%s.templates_poll_interval must be positive", provider)
+			}
+		}
+	}
+	return nil
 }

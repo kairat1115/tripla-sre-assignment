@@ -138,12 +138,10 @@ tests:
             name: templates
             mountPath: /templates
 
-  - it: HPA renders when staging overlay sets hpa.enabled true
+  - it: no HPA rendered with staging overlay
     template: charts/app/templates/hpa.yaml
     values:
       - ../values-staging.yaml
     asserts:
       - hasDocuments:
-          count: 1
-      - isKind:
-          of: HorizontalPodAutoscaler
+          count: 0

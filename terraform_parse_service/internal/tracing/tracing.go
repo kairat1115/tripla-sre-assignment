@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -50,9 +51,9 @@ func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, func
 	if err != nil {
 		return nil, nil, fmt.Errorf("build trace resource: %w", err)
 	}
-	sampler := sdktrace.AlwaysSample()
+	sampler := sdktrace.ParentBased(sdktrace.AlwaysSample())
 	if cfg.Tracing.SampleRatio < 1.0 {
-		sampler = sdktrace.TraceIDRatioBased(cfg.Tracing.SampleRatio)
+		sampler = sdktrace.ParentBased(sdktrace.TraceIDRatioBased(cfg.Tracing.SampleRatio))
 	}
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),
@@ -60,5 +61,9 @@ func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, func
 		sdktrace.WithSampler(sampler),
 	)
 	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 	return tp, tp.Shutdown, nil
 }

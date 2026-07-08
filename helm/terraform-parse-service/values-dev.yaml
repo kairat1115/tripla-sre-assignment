@@ -8,18 +8,17 @@ app:
       value: "dev"
   hpa:
     enabled: false
+    # NOTE: because application does not support scaling with replicas, disable them
   configMaps:
     - name: config
       data:
         config.yaml:
           listen_addr: ":8080"
+          service_name: "terraform-parse-service"
           environment: "dev"
-          version: "dev"
+          version: '{{ .Values.image.tag }}'
           logger:
             level: "debug"
-            metadata:
-              service: "terraform-parse-service"
-              env: "dev"
           tracing:
             exporter: "stdout"
             endpoint: "localhost:4317"
@@ -30,6 +29,7 @@ app:
           providers:
             aws:
               templates_dir: "/templates/aws"
+              templates_poll_interval: "5s"
               storage_dir: "/output/aws"
 
 gateway:

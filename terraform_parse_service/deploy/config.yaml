@@ -1,6 +1,6 @@
 listen_addr: ":8080"
-environment: "production"
-version: "dev"
+environment: "${ENVIRONMENT:development}"
+version: "${VERSION:dev}"
 logger:
   level: "info"
 tracing:
@@ -13,4 +13,5 @@ metrics:
 providers:
   aws:
     templates_dir: "/templates/aws"
+    templates_poll_interval: "5s"
     storage_dir: "/output/aws"

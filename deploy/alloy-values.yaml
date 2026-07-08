@@ -19,6 +19,11 @@ alloy:
           action        = "keep"
         }
         rule {
+          source_labels = ["__meta_kubernetes_pod_phase"]
+          regex         = "Running"
+          action        = "keep"
+        }
+        rule {
           source_labels = ["__meta_kubernetes_pod_container_name"]
           regex         = "app"
           action        = "keep"
@@ -47,14 +52,12 @@ alloy:
 
         stage.json {
           expressions = {
-            trace_id     = "trace_id",
             level        = "level",
             service_name = "service_name",
           }
         }
         stage.labels {
           values = {
-            trace_id     = "trace_id",
             level        = "level",
             service_name = "service_name",
           }
@@ -68,7 +71,7 @@ alloy:
       }
 
       // ── Metrics ─────────────────────────────────────────────────────────────
-      // Istio overwrites prometheus.io/* pod annotations with its own envoy stats.
+      // Istio may rewrite prometheus.io/* pod annotations to Envoy metrics.
       // Scrape the app metrics port directly instead of relying on annotations.
 
       discovery.kubernetes "app_metrics" {
@@ -84,6 +87,16 @@ alloy:
         rule {
           source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_instance"]
           regex         = "terraform-parse-service"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_phase"]
+          regex         = "Running"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          regex         = "app"
           action        = "keep"
         }
         rule {

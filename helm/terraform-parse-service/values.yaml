@@ -135,13 +135,11 @@ app:
       data:
         config.yaml:
           listen_addr: ":8080"
+          service_name: "terraform-parse-service"
           environment: "production"
-          version: "0.1.0"
+          version: '{{ .Values.image.tag }}'
           logger:
             level: "info"
-            metadata:
-              service: "terraform-parse-service"
-              env: "${APP_ENV}"
           tracing:
             exporter: "stdout"
             endpoint: "localhost:4317"
@@ -152,6 +150,7 @@ app:
           providers:
             aws:
               templates_dir: "/templates/aws"
+              templates_poll_interval: "5s"
               storage_dir: "/output/aws"
 
 gateway:

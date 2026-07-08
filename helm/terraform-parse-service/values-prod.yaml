@@ -1,12 +1,20 @@
 app:
   replicaCount: 1
-  # replicaCount: 2
+
+  image:
+    repository: terraform-parse-service
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
   serviceAccount:
     create: true
+
   automountServiceAccountToken: true
+
   env:
     - name: APP_ENV
       value: "production"
+
   resources:
     requests:
       cpu: "200m"
@@ -14,6 +22,7 @@ app:
     limits:
       cpu: "1000m"
       memory: "512Mi"
+
   hpa:
     enabled: false
     # NOTE: because application does not support scaling with replicas, disable them
@@ -22,28 +31,28 @@ app:
     # maxReplicas: 6
     # targetCPUUtilizationPercentage: 50
     # targetMemoryUtilizationPercentage: 80
+
   configMaps:
     - name: config
       data:
         config.yaml:
           listen_addr: ":8080"
+          service_name: "terraform-parse-service"
           environment: "production"
-          version: "production"
+          version: '{{ .Values.image.tag }}'
           logger:
             level: "info"
-            metadata:
-              service: "terraform-parse-service"
-              env: "production"
           tracing:
             exporter: "otlp_grpc"
-            endpoint: "tempo.monitoring.svc.cluster.local:4317"
-            insecure: false
+            endpoint: "alloy.monitoring.svc.cluster.local:4317"
+            insecure: true
             sample_ratio: 1.0
           metrics:
             addr: ":9091"
           providers:
             aws:
               templates_dir: "/templates/aws"
+              templates_poll_interval: "5s"
               storage_dir: "/output/aws"
 
 gateway:

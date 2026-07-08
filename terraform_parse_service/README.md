@@ -6,6 +6,22 @@ HTTP service that renders Terraform HCL configurations from a JSON payload and w
 
 - Go 1.25+
 
+## Structure
+
+The service is split by responsibility:
+
+| Path | Responsibility |
+|---|---|
+| `cmd/server` | Small entrypoint: load config, initialize logger/tracing, run the app |
+| `internal/app` | Server wiring, route registration, metrics server, graceful shutdown |
+| `internal/httpapi` | Router wrapper, JSON responses, error normalization, HTTP metrics/tracing middleware |
+| `internal/resource` | Shared resource contracts for routing, locating, and rendering Terraform resources |
+| `internal/resource/aws` | AWS provider router; registers AWS service routers |
+| `internal/resource/aws/s3` | AWS S3 service router; registers S3 resource routers |
+| `internal/resource/aws/s3/bucket` | S3 bucket validation, HTTP handlers, and Terraform template data |
+| `internal/render` | Template loading and rendering into provider-specific stores |
+| `internal/store` | Storage interface and filesystem implementation |
+
 ## Build and run
 
 ```bash
@@ -62,10 +78,16 @@ metrics:
 providers:
   aws:
     templates_dir: "./templates/aws"
+    templates_poll_interval: "5s"
     storage_dir: "./output/aws"
 ```
 
 Values support `${VAR}` interpolation - any unset variable falls back to the literal string in the file.
+
+Templates are loaded at startup and then polled per provider. When any `.tmpl`
+file below `templates_dir` is added, removed, renamed, or changed, the provider's
+template set is reloaded without restarting the service. If a reload fails, the
+last successfully loaded template set remains active.
 
 | Environment variable | Effect |
 |---|---|
