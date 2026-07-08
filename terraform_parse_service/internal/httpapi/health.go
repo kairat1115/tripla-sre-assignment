@@ -34,7 +34,10 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	for provider, count := range counts {
 		if count == 0 {
-			h.logger.Warn("health check failed", zap.String("reason", "templates directory is empty"), zap.String("provider", provider))
+			h.logger.Warn("health check failed",
+				zap.String("reason", "templates directory is empty"),
+				zap.String("terraform.provider.name", provider),
+			)
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}

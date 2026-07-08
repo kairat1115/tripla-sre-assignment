@@ -54,7 +54,7 @@ func New(cfg config.Config, logger *zap.Logger) (*App, error) {
 	}
 
 	router := httpapi.NewRouter(m, logger)
-	router.Handle(http.MethodGet, "/health", httpapi.NewHealthHandler(renderer, logger))
+	router.HandleUninstrumented(http.MethodGet, "/health", httpapi.NewHealthHandler(renderer, logger))
 	awsresource.NewRouter(renderer, m).RegisterRoutes(router)
 
 	return &App{

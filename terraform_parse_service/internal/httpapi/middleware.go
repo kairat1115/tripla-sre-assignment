@@ -43,6 +43,13 @@ func (r *Router) Handle(method, pattern string, h http.Handler) {
 	r.mux.Handle(method+" "+pattern, Instrument(r.metrics, r.logger, method, pattern, h))
 }
 
+// HandleUninstrumented registers a method and path pattern without request
+// logs, request metrics, or a server span. Use it only for high-volume
+// machine endpoints such as health checks.
+func (r *Router) HandleUninstrumented(method, pattern string, h http.Handler) {
+	r.mux.Handle(method+" "+pattern, h)
+}
+
 // Handler returns the complete HTTP handler with normalized JSON error output.
 func (r *Router) Handler() http.Handler {
 	return NormalizeErrors(r.mux)
