@@ -75,6 +75,7 @@ func New(cfg config.Config, logger *zap.Logger) (*App, error) {
 func (a *App) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	shutdownCtx := context.WithoutCancel(ctx)
 
 	errCh := make(chan error, 2)
 
@@ -84,10 +85,10 @@ func (a *App) Run(ctx context.Context) error {
 
 	select {
 	case <-runCtx.Done():
-		return a.Shutdown(context.Background())
+		return a.Shutdown(shutdownCtx)
 	case err := <-errCh:
 		cancel()
-		_ = a.Shutdown(context.Background())
+		_ = a.Shutdown(shutdownCtx)
 		return err
 	}
 }

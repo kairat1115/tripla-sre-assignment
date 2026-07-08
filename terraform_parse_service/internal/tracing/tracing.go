@@ -18,8 +18,8 @@ import (
 )
 
 // New creates and installs the global OpenTelemetry tracer provider. The
-// returned shutdown function must be called during service shutdown.
-func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, func(context.Context) error, error) {
+// returned provider must be shut down during service shutdown.
+func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, error) {
 	var exp sdktrace.SpanExporter
 	var err error
 	switch cfg.Tracing.Exporter {
@@ -36,10 +36,10 @@ func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, func
 		}
 		exp, err = otlptracegrpc.New(ctx, opts...)
 	default:
-		return nil, nil, fmt.Errorf("unknown trace exporter %q: supported values are stdout, otlp_grpc", cfg.Tracing.Exporter)
+		return nil, fmt.Errorf("unknown trace exporter %q: supported values are stdout, otlp_grpc", cfg.Tracing.Exporter)
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("build trace exporter: %w", err)
+		return nil, fmt.Errorf("build trace exporter: %w", err)
 	}
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
@@ -49,7 +49,7 @@ func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, func
 		),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build trace resource: %w", err)
+		return nil, fmt.Errorf("build trace resource: %w", err)
 	}
 	sampler := sdktrace.ParentBased(sdktrace.AlwaysSample())
 	if cfg.Tracing.SampleRatio < 1.0 {
@@ -65,5 +65,5 @@ func New(ctx context.Context, cfg config.Config) (*sdktrace.TracerProvider, func
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
-	return tp, tp.Shutdown, nil
+	return tp, nil
 }

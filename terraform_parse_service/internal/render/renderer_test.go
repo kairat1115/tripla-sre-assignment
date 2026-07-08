@@ -48,6 +48,7 @@ func (g testGenerator) TemplateData() any {
 }
 
 func TestRendererReloadTemplates(t *testing.T) {
+	ctx := context.Background()
 	dir := t.TempDir()
 	writeTemplate(t, dir, "first: {{ .Value }}")
 
@@ -62,7 +63,7 @@ func TestRendererReloadTemplates(t *testing.T) {
 		metrics.New(prometheus.NewRegistry()),
 	)
 
-	if _, err := renderer.Generate(context.Background(), testGenerator{value: "one"}); err != nil {
+	if _, err := renderer.Generate(ctx, testGenerator{value: "one"}); err != nil {
 		t.Fatalf("generate first: %v", err)
 	}
 	if got := string(st.content); got != "first: one" {
@@ -73,7 +74,7 @@ func TestRendererReloadTemplates(t *testing.T) {
 	if err := renderer.ReloadTemplates("test", dir); err != nil {
 		t.Fatalf("reload templates: %v", err)
 	}
-	if _, err := renderer.Generate(context.Background(), testGenerator{value: "two"}); err != nil {
+	if _, err := renderer.Generate(ctx, testGenerator{value: "two"}); err != nil {
 		t.Fatalf("generate second: %v", err)
 	}
 	if got := string(st.content); got != "second: two" {

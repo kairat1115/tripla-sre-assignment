@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -16,7 +17,11 @@ import (
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/tracing"
 )
 
+const tracingShutdownTimeout = 5 * time.Second
+
 func main() {
+	rootCtx := context.Background()
+
 	bootstrap, _ := zap.NewProduction()
 	defer func() { _ = bootstrap.Sync() }()
 
@@ -34,12 +39,18 @@ func main() {
 	defer func() { _ = log.Sync() }()
 	zap.ReplaceGlobals(log)
 
-	_, shutdownTracing, err := tracing.New(context.Background(), cfg)
+	traceProvider, err := tracing.New(rootCtx, cfg)
 	if err != nil {
 		log.Error("tracer init failed", zap.Error(err))
 		os.Exit(1)
 	}
-	defer func() { _ = shutdownTracing(context.Background()) }()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(rootCtx, tracingShutdownTimeout)
+		defer cancel()
+		if err := traceProvider.Shutdown(shutdownCtx); err != nil {
+			log.Warn("tracer shutdown failed", zap.Error(err))
+		}
+	}()
 
 	application, err := app.New(cfg, log)
 	if err != nil {
@@ -47,7 +58,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(rootCtx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	if err := application.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
