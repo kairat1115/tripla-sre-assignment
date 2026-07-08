@@ -15,6 +15,10 @@ spec:
     metadata:
       labels:
         {{- include "app.selectorLabels" . | nindent 8 }}
+        {{- $version := default .Chart.AppVersion .Values.image.tag }}
+        {{- if $version }}
+        app.kubernetes.io/version: {{ $version | quote }}
+        {{- end }}
       {{- if or .Values.podAnnotations .Values.configMaps }}
       annotations:
         {{- with .Values.podAnnotations }}

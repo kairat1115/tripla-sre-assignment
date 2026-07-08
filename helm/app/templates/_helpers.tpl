@@ -12,10 +12,6 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- define "app.selectorLabels" -}}
 app.kubernetes.io/name: {{ tpl (default .Chart.Name .Values.nameOverride) . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-{{ $version := default .Chart.AppVersion .Values.image.tag -}}
-{{ if $version }}
-app.kubernetes.io/version: {{ $version | quote }}
-{{ end }}
 {{- end }}
 
 {{- define "app.serviceAccountName" -}}
