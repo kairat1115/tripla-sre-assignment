@@ -14,12 +14,8 @@ type Router struct {
 }
 
 // NewRouter creates an S3 service router backed by the Terraform renderer.
-func NewRouter(svc resource.Terraform, m ...*metrics.Metrics) *Router {
-	rt := &Router{svc: svc}
-	if len(m) > 0 {
-		rt.m = m[0]
-	}
-	return rt
+func NewRouter(svc resource.Terraform, m *metrics.Metrics) *Router {
+	return &Router{svc: svc, m: m}
 }
 
 // RegisterRoutes registers S3 resource routers on r.

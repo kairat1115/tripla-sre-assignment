@@ -39,6 +39,6 @@ func newTestServer(t *testing.T) *httptest.Server {
 		m,
 	)
 	router := httpapi.NewRouter(m, zap.NewNop())
-	awsresource.NewRouter(tfSvc).RegisterRoutes(router)
+	awsresource.NewRouter(tfSvc, m).RegisterRoutes(router)
 	return httptest.NewServer(router.Handler())
 }

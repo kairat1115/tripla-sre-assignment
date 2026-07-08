@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource"
 )
 
@@ -43,8 +46,12 @@ func (s *stubTerraform) Delete(_ context.Context, _ resource.Locator) error {
 	return s.err
 }
 
+func newTestRouter(svc *stubTerraform) *Router {
+	return NewRouter(svc, metrics.New(prometheus.NewRegistry()))
+}
+
 func TestRouter_BadJSON(t *testing.T) {
-	rt := NewRouter(&stubTerraform{})
+	rt := newTestRouter(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString("{bad"))
 
@@ -61,7 +68,7 @@ func TestRouter_BadJSON(t *testing.T) {
 }
 
 func TestRouter_MissingProperty(t *testing.T) {
-	rt := NewRouter(&stubTerraform{})
+	rt := newTestRouter(&stubTerraform{})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
@@ -74,7 +81,7 @@ func TestRouter_MissingProperty(t *testing.T) {
 }
 
 func TestRouter_GenerationError(t *testing.T) {
-	rt := NewRouter(&stubTerraform{err: fmt.Errorf("render failed")})
+	rt := newTestRouter(&stubTerraform{err: fmt.Errorf("render failed")})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"my-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
@@ -87,7 +94,7 @@ func TestRouter_GenerationError(t *testing.T) {
 }
 
 func TestRouter_Success(t *testing.T) {
-	rt := NewRouter(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
+	rt := newTestRouter(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"my-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
@@ -125,7 +132,7 @@ func TestRouter_InvalidBucketName(t *testing.T) {
 				`{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":%q}}}`,
 				tc.bucketName,
 			)
-			rt := NewRouter(&stubTerraform{})
+			rt := newTestRouter(&stubTerraform{})
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, "/api/aws/v1/s3/buckets", bytes.NewBufferString(body))
 			rt.Create()(rec, req)
@@ -137,7 +144,7 @@ func TestRouter_InvalidBucketName(t *testing.T) {
 }
 
 func TestRouter_List_Empty(t *testing.T) {
-	rt := NewRouter(&stubTerraform{})
+	rt := newTestRouter(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets", nil)
 	rt.List()(rec, req)
@@ -154,7 +161,7 @@ func TestRouter_List_Empty(t *testing.T) {
 }
 
 func TestRouter_List_WithBuckets(t *testing.T) {
-	rt := NewRouter(&stubTerraform{buckets: []string{"alpha", "beta"}})
+	rt := newTestRouter(&stubTerraform{buckets: []string{"alpha", "beta"}})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets", nil)
 	rt.List()(rec, req)
@@ -171,7 +178,7 @@ func TestRouter_List_WithBuckets(t *testing.T) {
 }
 
 func TestRouter_Get_NotFound(t *testing.T) {
-	rt := NewRouter(&stubTerraform{err: fmt.Errorf("read %s: %w", "x", os.ErrNotExist)})
+	rt := newTestRouter(&stubTerraform{err: fmt.Errorf("read %s: %w", "x", os.ErrNotExist)})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets/my-bucket", nil)
 	req.SetPathValue("bucket_name", "my-bucket")
@@ -183,7 +190,7 @@ func TestRouter_Get_NotFound(t *testing.T) {
 
 func TestRouter_Get_Success(t *testing.T) {
 	want := []byte("resource \"aws_s3_bucket\" {}")
-	rt := NewRouter(&stubTerraform{content: want})
+	rt := newTestRouter(&stubTerraform{content: want})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/aws/v1/s3/buckets/my-bucket", nil)
 	req.SetPathValue("bucket_name", "my-bucket")
@@ -197,7 +204,7 @@ func TestRouter_Get_Success(t *testing.T) {
 }
 
 func TestRouter_Put_NameMismatch(t *testing.T) {
-	rt := NewRouter(&stubTerraform{})
+	rt := newTestRouter(&stubTerraform{})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"other-bucket"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/aws/v1/s3/buckets/my-bucket", bytes.NewBufferString(body))
@@ -209,7 +216,7 @@ func TestRouter_Put_NameMismatch(t *testing.T) {
 }
 
 func TestRouter_Put_Success(t *testing.T) {
-	rt := NewRouter(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
+	rt := newTestRouter(&stubTerraform{path: "/out/s3/my-bucket/main.tf"})
 	body := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/aws/v1/s3/buckets/my-bucket", bytes.NewBufferString(body))
@@ -228,7 +235,7 @@ func TestRouter_Put_Success(t *testing.T) {
 }
 
 func TestRouter_Delete_InvalidName(t *testing.T) {
-	rt := NewRouter(&stubTerraform{})
+	rt := newTestRouter(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/aws/v1/s3/buckets/AB", nil)
 	req.SetPathValue("bucket_name", "AB")
@@ -239,7 +246,7 @@ func TestRouter_Delete_InvalidName(t *testing.T) {
 }
 
 func TestRouter_Delete_Success(t *testing.T) {
-	rt := NewRouter(&stubTerraform{})
+	rt := newTestRouter(&stubTerraform{})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/aws/v1/s3/buckets/my-bucket", nil)
 	req.SetPathValue("bucket_name", "my-bucket")
