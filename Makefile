@@ -168,7 +168,6 @@ app-upgrade: app-dep
 	helm upgrade --install $(APP_RELEASE) helm/terraform-parse-service \
 	  -f helm/terraform-parse-service/values.yaml \
 	  -f helm/terraform-parse-service/values-prod.yaml \
-	  -f deploy/values-kind.yaml \
 	  --set app.image.repository=$(IMAGE_REPOSITORY) \
 	  --set app.image.tag=$(IMAGE_TAG) \
 	  --namespace $(NAMESPACE_APP)
@@ -180,7 +179,6 @@ app-render: app-dep
 	helm template $(APP_RELEASE) helm/terraform-parse-service \
 	  -f helm/terraform-parse-service/values.yaml \
 	  -f helm/terraform-parse-service/values-prod.yaml \
-	  -f deploy/values-kind.yaml \
 	  --set app.image.repository=$(IMAGE_REPOSITORY) \
 	  --set app.image.tag=$(IMAGE_TAG) \
 	  --namespace $(NAMESPACE_APP)
