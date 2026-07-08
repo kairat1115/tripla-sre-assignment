@@ -1,7 +1,3 @@
-{{- $region  := index .Properties "aws-region" -}}
-{{- $bucket  := index .Properties "bucket-name" -}}
-{{- $acl     := index .Properties "acl" -}}
-{{- $resName := $bucket | replace "-" "_" -}}
 terraform {
   required_providers {
     aws = {
@@ -12,14 +8,14 @@ terraform {
 }
 
 provider "aws" {
-  region = {{ $region | quote }}
+  region = {{ .Region | quote }}
 }
 
-resource "aws_s3_bucket" {{ $resName | quote }} {
-  bucket = {{ $bucket | quote }}
+resource "aws_s3_bucket" {{ .ResourceName | quote }} {
+  bucket = {{ .BucketName | quote }}
 }
 
-resource "aws_s3_bucket_acl" {{ printf "%s_acl" $resName | quote }} {
-  bucket = aws_s3_bucket.{{ $resName }}.id
-  acl    = {{ $acl | quote }}
+resource "aws_s3_bucket_acl" {{ printf "%s_acl" .ResourceName | quote }} {
+  bucket = aws_s3_bucket.{{ .ResourceName }}.id
+  acl    = {{ .ACL | quote }}
 }
