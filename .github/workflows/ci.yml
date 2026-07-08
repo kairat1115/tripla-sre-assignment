@@ -1,0 +1,85 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: terraform_parse_service/go.mod
+          cache-dependency-path: terraform_parse_service/go.sum
+
+      - name: Download modules
+        working-directory: terraform_parse_service
+        run: go mod download
+
+      - name: Check formatting
+        working-directory: terraform_parse_service
+        run: |
+          files="$(gofmt -l .)"
+          if [ -n "$files" ]; then
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Vet
+        working-directory: terraform_parse_service
+        run: go vet ./...
+
+      - name: Test
+        working-directory: terraform_parse_service
+        run: go test ./...
+
+  helm:
+    name: helm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v5
+
+      - name: Setup chart-testing
+        uses: helm/chart-testing-action@v2.8.0
+
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest
+
+      - name: Run chart-testing
+        working-directory: helm
+        run: ct lint --config ct.yaml --all
+
+  container:
+    name: container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: terraform_parse_service
+          file: terraform_parse_service/Dockerfile
+          push: false
+          tags: terraform-parse-service:ci

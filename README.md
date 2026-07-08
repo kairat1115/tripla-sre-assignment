@@ -439,6 +439,23 @@ kubectl port-forward svc/grafana 3000:80 -n monitoring
 - Filter by `level`, `trace_id` labels
 - Click `trace_id` value in Loki to jump to correlated trace in Tempo (TracesToLogsV2 derivation)
 
+## CI/CD
+
+GitHub Actions workflows live under `.github/workflows/`.
+
+- `ci.yml` runs on pull requests and pushes to `main`.
+- CI checks Go formatting, `go vet`, `go test ./...`, chart-testing (`ct lint` with Helm lint, yamllint, and helm-unittest), and a Docker image build.
+- `release.yml` runs on release tags matching `v*` and gates release creation on the CI workflow.
+- CD pushes the container image to `ghcr.io/<owner>/terraform-parse-service`.
+- CD uploads these GitHub Release assets: Linux server tarballs for `amd64` and `arm64`, Helm chart `.tgz` packages for `app`, `gateway`, and `terraform-parse-service`, Terraform templates `.zip`, and `SHA256SUMS`.
+
+Create a release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Teardown
 
 ```bash
