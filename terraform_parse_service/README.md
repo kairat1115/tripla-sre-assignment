@@ -25,8 +25,20 @@ The service is split by responsibility:
 ## Build and run
 
 ```bash
-go build -o server ./cmd/server
-CONFIG_PATH=configs/config.yaml ./server
+make build
+CONFIG_PATH=configs/config.yaml ./bin/terraform-parse-service-server
+```
+
+Run without building a binary:
+
+```bash
+make run-server
+```
+
+Show available service targets:
+
+```bash
+make help
 ```
 
 ### Docker
@@ -96,12 +108,11 @@ last successfully loaded template set remains active.
 ## Testing
 
 ```bash
-# unit tests
-go test ./internal/...
+make lint
+make vet
 
-# integration tests (require templates on disk)
-go test ./test/...
+make test-unit
+make test-integration
 
-# all
-go test ./...
+make test
 ```
