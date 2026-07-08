@@ -310,7 +310,7 @@ kubectl exec -n terraform-parse-service \
 
 | Resource | Details |
 |----------|---------|
-| Deployment | 2 replicas, main + k8s-sidecar containers |
+| Deployment | 1 replica, main + k8s-sidecar containers |
 | Service | ClusterIP, port 8080 + 9091 metrics |
 | HPA | disabled in prod values (emptyDir output volume prevents safe multi-replica scaling) |
 | ConfigMap `*-config` | service config.yaml |
@@ -320,6 +320,8 @@ kubectl exec -n terraform-parse-service \
 | Istio DestinationRule | enabled (values-prod.yaml) |
 
 ### Step 8: Test the service
+
+`make test` automates all three calls below — POST, GET list, GET contents — then diffs the bucket output against `deploy/expected-bucket.tf` and exits 1 on mismatch.
 
 #### Create bucket
 
@@ -370,7 +372,7 @@ curl -s http://localhost/api/aws/v1/s3/buckets \
   -H "Content-Type: application/json" | jq .
 ```
 
-Expected (HTTP 201):
+Expected (HTTP 200):
 ```json
 {"buckets": ["test-bucket-01"]}
 ```
@@ -395,10 +397,7 @@ curl -s http://localhost/api/aws/v1/s3/buckets/test-bucket-01 \
   -H "Content-Type: application/json" | jq .
 ```
 
-Expected (HTTP 201):
-```terraform
-# same output as deploy/expected-bucket.tf
-```
+Expected (HTTP 200): raw HCL matching `deploy/expected-bucket.tf`.
 
 **Direct port-forward (bypasses Istio):**
 
