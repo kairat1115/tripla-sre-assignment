@@ -53,7 +53,7 @@ func (rt *Router) List() http.HandlerFunc {
 		defer func() { rt.recordOperation("list", status, start) }()
 		annotateBucketRequest(ctx, "list", "")
 
-		buckets, err := rt.svc.List(ctx, resourceLocator{provider: "aws", path: "s3/"})
+		buckets, err := rt.svc.List(ctx, resourceLocator{})
 		if err != nil {
 			httpapi.RecordError(ctx, "err-handler-list", err)
 			httpapi.Error(w, http.StatusInternalServerError, "list failed")
@@ -79,7 +79,7 @@ func (rt *Router) Get() http.HandlerFunc {
 			httpapi.Error(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		content, err := rt.svc.Read(ctx, resourceLocator{provider: "aws", path: "s3/" + bucketName})
+		content, err := rt.svc.Read(ctx, resourceLocator{BucketName: bucketName})
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				httpapi.RecordError(ctx, "err-handler-bucket-not-found", err)
@@ -168,7 +168,7 @@ func (rt *Router) Delete() http.HandlerFunc {
 			httpapi.Error(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		if err := rt.svc.Delete(ctx, resourceLocator{provider: "aws", path: "s3/" + bucketName}); err != nil {
+		if err := rt.svc.Delete(ctx, resourceLocator{BucketName: bucketName}); err != nil {
 			httpapi.RecordError(ctx, "err-handler-delete", err)
 			httpapi.Error(w, http.StatusInternalServerError, "delete failed")
 			return

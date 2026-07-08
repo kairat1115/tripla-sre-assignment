@@ -39,11 +39,16 @@ type TemplateData struct {
 }
 
 type resourceLocator struct {
-	provider string
-	path     string
+	BucketName string
 }
 
-func (l resourceLocator) Provider() string    { return l.provider }
-func (l resourceLocator) StoragePath() string { return l.path }
+func (l resourceLocator) Provider() string { return "aws" }
+
+func (l resourceLocator) StoragePath() string {
+	if l.BucketName == "" {
+		return "s3/"
+	}
+	return "s3/" + l.BucketName
+}
 
 var _ resource.Generator = (*Generator)(nil)
