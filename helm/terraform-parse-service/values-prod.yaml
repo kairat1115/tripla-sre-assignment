@@ -12,8 +12,18 @@ app:
   automountServiceAccountToken: true
 
   env:
-    - name: APP_ENV
-      value: "production"
+    - name: OTEL_SERVICE_NAME
+      value: "terraform-parse-service"
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      value: 'deployment.environment.name=production,service.version={{ .Values.image.tag }}'
+    - name: OTEL_TRACES_EXPORTER
+      value: "otlp"
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://alloy.monitoring.svc.cluster.local:4317"
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: "grpc"
+    - name: OTEL_TRACES_SAMPLER
+      value: "parentbased_always_on"
 
   resources:
     requests:
@@ -42,11 +52,6 @@ app:
           version: '{{ .Values.image.tag }}'
           logger:
             level: "info"
-          tracing:
-            exporter: "otlp_grpc"
-            endpoint: "alloy.monitoring.svc.cluster.local:4317"
-            insecure: true
-            sample_ratio: 1.0
           metrics:
             addr: ":9091"
           providers:

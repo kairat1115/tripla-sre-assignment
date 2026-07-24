@@ -4,32 +4,43 @@ package logger
 import (
 	"fmt"
 
+	"go.opentelemetry.io/contrib/bridges/otelzap"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
 )
 
-// New returns a production zap logger with configured level and static
-// metadata. Invalid configured levels fall back to info.
+const instrumentationName = "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/logger"
+
+// New returns a production zap logger that writes JSON to stdout and forwards
+// records to the global OpenTelemetry LoggerProvider installed by
+// auto-instrumentation.
 func New(cfg config.Config) (*zap.Logger, error) {
 	var level zapcore.Level
 	if err := level.UnmarshalText([]byte(cfg.Logger.Level)); err != nil {
-		level = zapcore.InfoLevel
+		return nil, fmt.Errorf("parse logger level %q: %w", cfg.Logger.Level, err)
 	}
 	zapCfg := zap.NewProductionConfig()
+	zapCfg.Encoding = "json"
 	zapCfg.Level = zap.NewAtomicLevelAt(level)
 	l, err := zapCfg.Build()
 	if err != nil {
 		return nil, fmt.Errorf("build logger: %w", err)
 	}
-	fields := []zap.Field{
-		zap.String("service_name", cfg.ServiceName),
-		zap.String("environment", cfg.Environment),
-		zap.String("version", cfg.Version),
+	stdoutFields := []zap.Field{
+		zap.String("service.name", cfg.ServiceName),
+		zap.String("deployment.environment.name", cfg.Environment),
+		zap.String("service.version", cfg.Version),
 	}
-	for k, v := range cfg.Logger.Metadata {
-		fields = append(fields, zap.String(k, v))
-	}
-	return l.With(fields...), nil
+	l = l.WithOptions(
+		zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+			return zapcore.NewTee(
+				core.With(stdoutFields),
+				otelzap.NewCore(instrumentationName),
+			)
+		}),
+		zap.IncreaseLevel(level),
+	)
+	return l, nil
 }

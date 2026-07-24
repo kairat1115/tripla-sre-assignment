@@ -1,7 +1,6 @@
 package bucket
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 )
@@ -22,9 +21,9 @@ type Properties struct {
 func (p Properties) Validate() error {
 	switch {
 	case p.Region == "":
-		return fmt.Errorf("missing required property: aws-region")
+		return errMissingRegion
 	case p.ACL == "":
-		return fmt.Errorf("missing required property: acl")
+		return errMissingACL
 	default:
 		return ValidateName(p.BucketName)
 	}
@@ -35,13 +34,13 @@ func (p Properties) Validate() error {
 func ValidateName(name string) error {
 	switch {
 	case name == "":
-		return fmt.Errorf("missing required property: bucket-name")
+		return errMissingBucketName
 	case len(name) < 3 || len(name) > 63:
-		return fmt.Errorf("invalid bucket-name: must be 3-63 characters")
+		return errInvalidBucketNameLength
 	case !nameRE.MatchString(name):
-		return fmt.Errorf("invalid bucket-name: must contain only lowercase letters, digits, hyphens, and dots, and start/end with a letter or digit")
+		return errInvalidBucketNameChars
 	case strings.Contains(name, ".."):
-		return fmt.Errorf("invalid bucket-name: must not contain consecutive dots")
+		return errConsecutiveDots
 	default:
 		return nil
 	}
@@ -49,13 +48,31 @@ func ValidateName(name string) error {
 
 // Request is the JSON request shape accepted by create and update calls.
 type Request struct {
+	// Payload contains the requested resource properties.
 	Payload struct {
+		// Properties contains the S3 bucket settings.
 		Properties Properties `json:"properties"`
 	} `json:"payload"`
 }
 
-// Response reports where the generated Terraform file was written.
-type Response struct {
-	// OutputPath is the filesystem path to the rendered main.tf file.
+// ErrorResponse is the standard error schema returned by bucket endpoints.
+type ErrorResponse struct {
+	// Error describes why the request failed.
+	Error string `json:"error"`
+}
+
+func errorResponse(err error) ErrorResponse {
+	return ErrorResponse{Error: err.Error()}
+}
+
+// SaveResponse reports where generated Terraform output was stored.
+type SaveResponse struct {
+	// OutputPath is the backend-specific location of the rendered output.
 	OutputPath string `json:"output_path"`
+}
+
+// ListResponse contains the configured S3 bucket names.
+type ListResponse struct {
+	// Buckets contains one entry per generated bucket configuration.
+	Buckets []string `json:"buckets"`
 }

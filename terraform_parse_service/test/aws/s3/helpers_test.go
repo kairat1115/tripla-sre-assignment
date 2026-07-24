@@ -5,16 +5,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"text/template"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/httpapi"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/metrics"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/render"
-	awsresource "github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/resource/aws"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/store"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/server"
 )
 
 func moduleRoot() string {
@@ -25,21 +20,19 @@ func moduleRoot() string {
 func newTestServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
 	storageDir := t.TempDir()
-	st, err := store.NewFSStore(storageDir)
+	service, err := server.New(config.Config{
+		ListenAddr: ":0",
+		Metrics:    config.MetricsConfig{Addr: ":0"},
+		Providers: map[string]config.ProviderConfig{
+			"aws": {
+				TemplatesDir:          filepath.Join(moduleRoot(), "templates", "aws"),
+				TemplatesPollInterval: "1h",
+				StorageDir:            storageDir,
+			},
+		},
+	}, zap.NewNop())
 	if err != nil {
-		t.Fatalf("store init: %v", err)
+		t.Fatalf("server init: %v", err)
 	}
-	tmpl, err := render.LoadTemplates(filepath.Join(moduleRoot(), "templates", "aws"))
-	if err != nil {
-		t.Fatalf("template load: %v", err)
-	}
-	m := metrics.New(prometheus.NewRegistry())
-	tfSvc := render.New(
-		map[string]store.Store{"aws": st},
-		map[string]*template.Template{"aws": tmpl},
-		m,
-	)
-	router := httpapi.NewRouter(m, zap.NewNop())
-	awsresource.NewRouter(tfSvc, m).RegisterRoutes(router)
-	return httptest.NewServer(router.Handler()), storageDir
+	return httptest.NewServer(service.Handler()), storageDir
 }

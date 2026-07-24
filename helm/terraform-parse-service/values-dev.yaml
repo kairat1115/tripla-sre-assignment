@@ -4,8 +4,12 @@ app:
     create: true
   automountServiceAccountToken: true
   env:
-    - name: APP_ENV
-      value: "dev"
+    - name: OTEL_SERVICE_NAME
+      value: "terraform-parse-service"
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      value: 'deployment.environment.name=dev,service.version={{ .Values.image.tag }}'
+    - name: OTEL_TRACES_EXPORTER
+      value: "none"
   hpa:
     enabled: false
     # NOTE: because application does not support scaling with replicas, disable them
@@ -19,11 +23,6 @@ app:
           version: '{{ .Values.image.tag }}'
           logger:
             level: "debug"
-          tracing:
-            exporter: "stdout"
-            endpoint: "localhost:4317"
-            insecure: false
-            sample_ratio: 1.0
           metrics:
             addr: ":9091"
           providers:

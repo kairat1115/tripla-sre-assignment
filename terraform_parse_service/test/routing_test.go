@@ -2,9 +2,32 @@ package integration_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"testing"
 )
+
+func TestIntegration_Health(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/health")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	if len(body) != 0 {
+		t.Fatalf("want empty response, got %q", body)
+	}
+}
 
 func TestIntegration_MethodNotAllowed(t *testing.T) {
 	srv := newTestServer(t)

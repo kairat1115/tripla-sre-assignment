@@ -2,39 +2,60 @@ name: terraform-parse-service
 
 services:
   server:
+    image: terraform-parse-service:${GIT_SHA:-dev}
     build:
       context: ..
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+      - "9091:9091"
     volumes:
-      - ./config.yaml:/etc/server/config.yaml:ro
+      - ../configs/config.yaml:/configs/config.yaml:ro
       - ../templates:/templates:ro
-      - output:/output
+      - ../output:/output
     environment:
-      CONFIG_PATH: /etc/server/config.yaml
+      CONFIG_PATH: /configs/config.yaml
+      ENVIRONMENT: local
       VERSION: ${GIT_SHA:-dev}
+      OTEL_SERVICE_NAME: terraform-parse-service
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=local,service.version=${GIT_SHA:-dev}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+    init: true
     read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 15s
     depends_on:
       alloy:
         condition: service_started
-    networks:
-      - obs
 
   alloy:
     image: grafana/alloy:v1.17.1
-    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    user: "0"
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
     ports:
       - "4317:4317"
+      - "12345:12345"
     depends_on:
       - tempo
       - loki
       - prometheus
-    networks:
-      - obs
 
   tempo:
     image: grafana/tempo:3.0.2
@@ -42,8 +63,6 @@ services:
     volumes:
       - ./tempo/config.yaml:/etc/tempo.yaml:ro
       - tempo-data:/var/tempo
-    networks:
-      - obs
 
   loki:
     image: grafana/loki:3.7.3
@@ -51,8 +70,6 @@ services:
     volumes:
       - ./loki/config.yaml:/etc/loki/config.yaml:ro
       - loki-data:/loki
-    networks:
-      - obs
 
   prometheus:
     image: prom/prometheus:v3.12.0-distroless
@@ -64,8 +81,8 @@ services:
     volumes:
       - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
       - prometheus-data:/prometheus
-    networks:
-      - obs
+    ports:
+      - "9090:9090"
 
   grafana:
     image: grafana/grafana:13.0.3
@@ -74,23 +91,19 @@ services:
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/provisioning/dashboards/service.json:/var/lib/grafana/dashboards/service.json:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       - tempo
       - loki
       - prometheus
-    networks:
-      - obs
 
 volumes:
-  output:
+  alloy-data:
   tempo-data:
   loki-data:
   prometheus-data:
   grafana-data:
-
-networks:
-  obs:
-    driver: bridge

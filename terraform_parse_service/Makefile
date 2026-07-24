@@ -3,6 +3,8 @@
 GO ?= go
 CONFIG_PATH ?= configs/config.yaml
 BINARY ?= bin/terraform-parse-service-server
+OTELC_VERSION ?= v1.0.1
+OTELC := $(CURDIR)/bin/otelc
 UNIT_PACKAGES := ./cmd/... ./internal/...
 INTEGRATION_PACKAGES := ./test/...
 
@@ -28,9 +30,13 @@ test-integration: ## Run integration tests.
 
 test: test-unit test-integration ## Run all tests.
 
-build: ## Build the server binary.
-	mkdir -p $(dir $(BINARY))
-	CGO_ENABLED=0 $(GO) build -trimpath -o $(BINARY) ./cmd/server
+$(OTELC):
+	mkdir -p $(dir $(OTELC))
+	GOBIN=$(dir $(OTELC)) $(GO) install go.opentelemetry.io/otelc/tool/cmd/otelc@$(OTELC_VERSION)
 
-run-server: ## Run the server locally.
-	CONFIG_PATH=$(CONFIG_PATH) $(GO) run ./cmd/server
+build: $(OTELC) ## Build an auto-instrumented server binary.
+	mkdir -p $(dir $(BINARY))
+	CGO_ENABLED=0 $(OTELC) go build -trimpath -o $(BINARY) ./cmd/server
+
+run-server: build ## Build and run the auto-instrumented server locally.
+	CONFIG_PATH=$(CONFIG_PATH) ./$(BINARY)

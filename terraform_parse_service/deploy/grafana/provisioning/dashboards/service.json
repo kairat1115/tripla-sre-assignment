@@ -4,7 +4,7 @@
   "tags": ["terraform", "sre-assignment"],
   "timezone": "browser",
   "schemaVersion": 38,
-  "version": 2,
+  "version": 6,
   "refresh": "15s",
   "time": {
     "from": "now-1h",
@@ -13,10 +13,21 @@
   "templating": {
     "list": [
       {
+        "name": "route",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(traces_spanmetrics_calls_total{service=\"terraform-parse-service\",span_kind=\"SPAN_KIND_SERVER\"}, span_name)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      },
+      {
         "name": "provider",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "query": "label_values(terraform_resource_operations_total, provider)",
+        "query": "label_values(terraform_templates_loaded, provider)",
         "refresh": 1,
         "includeAll": true,
         "allValue": ".*",
@@ -27,29 +38,7 @@
         "name": "resource",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "query": "label_values(terraform_resource_operations_total{provider=~\"$provider\"}, resource)",
-        "refresh": 1,
-        "includeAll": true,
-        "allValue": ".*",
-        "multi": true,
-        "current": { "text": "All", "value": "$__all" }
-      },
-      {
-        "name": "operation",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "query": "label_values(terraform_resource_operations_total{provider=~\"$provider\", resource=~\"$resource\"}, operation)",
-        "refresh": 1,
-        "includeAll": true,
-        "allValue": ".*",
-        "multi": true,
-        "current": { "text": "All", "value": "$__all" }
-      },
-      {
-        "name": "path",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "query": "label_values(http_requests_total, path)",
+        "query": "label_values(terraform_generation_total{provider=~\"$provider\"}, resource)",
         "refresh": 1,
         "includeAll": true,
         "allValue": ".*",
@@ -61,15 +50,15 @@
   "panels": [
     {
       "id": 1,
-      "title": "HTTP request rate",
+      "title": "Request rate",
       "type": "stat",
       "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_requests_total{path=~\"$path\"}[$__rate_interval]))",
-          "legendFormat": "req/s"
+          "expr": "sum(rate(traces_spanmetrics_calls_total{service=\"terraform-parse-service\",span_kind=\"SPAN_KIND_SERVER\",span_name=~\"$route\"}[$__rate_interval]))",
+          "legendFormat": "requests"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2 }, "overrides": [] },
@@ -77,46 +66,14 @@
     },
     {
       "id": 2,
-      "title": "HTTP 5xx ratio",
+      "title": "Request error ratio",
       "type": "stat",
       "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_requests_total{path=~\"$path\", status_code=~\"5..\"}[$__rate_interval])) / clamp_min(sum(rate(http_requests_total{path=~\"$path\"}[$__rate_interval])), 0.001)",
-          "legendFormat": "5xx"
-        }
-      ],
-      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 }] } }, "overrides": [] },
-      "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto" }
-    },
-    {
-      "id": 3,
-      "title": "Resource operation rate",
-      "type": "stat",
-      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(terraform_resource_operations_total{provider=~\"$provider\", resource=~\"$resource\", operation=~\"$operation\"}[$__rate_interval]))",
-          "legendFormat": "ops/s"
-        }
-      ],
-      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 2 }, "overrides": [] },
-      "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto" }
-    },
-    {
-      "id": 4,
-      "title": "Resource error ratio",
-      "type": "stat",
-      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(terraform_resource_operations_total{provider=~\"$provider\", resource=~\"$resource\", operation=~\"$operation\", status=\"error\"}[$__rate_interval])) / clamp_min(sum(rate(terraform_resource_operations_total{provider=~\"$provider\", resource=~\"$resource\", operation=~\"$operation\"}[$__rate_interval])), 0.001)",
+          "expr": "sum(rate(traces_spanmetrics_calls_total{service=\"terraform-parse-service\",span_kind=\"SPAN_KIND_SERVER\",span_name=~\"$route\",status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) / clamp_min(sum(rate(traces_spanmetrics_calls_total{service=\"terraform-parse-service\",span_kind=\"SPAN_KIND_SERVER\",span_name=~\"$route\"}[$__rate_interval])), 0.001)",
           "legendFormat": "errors"
         }
       ],
@@ -124,79 +81,105 @@
       "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto" }
     },
     {
+      "id": 3,
+      "title": "Request p95",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{service=\"terraform-parse-service\",span_kind=\"SPAN_KIND_SERVER\",span_name=~\"$route\"}[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3 }, "overrides": [] },
+      "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto" }
+    },
+    {
+      "id": 4,
+      "title": "Generation success ratio",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(terraform_generation_total{provider=~\"$provider\",resource=~\"$resource\",status=\"success\"}[$__rate_interval])) / clamp_min(sum(rate(terraform_generation_total{provider=~\"$provider\",resource=~\"$resource\"}[$__rate_interval])), 0.001)",
+          "legendFormat": "success"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "red" }, { "color": "yellow", "value": 0.95 }, { "color": "green", "value": 0.99 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto" }
+    },
+    {
       "id": 5,
-      "title": "HTTP p95 latency by path",
+      "title": "Request latency by route",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 4, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, path) (rate(http_request_duration_seconds_bucket{path=~\"$path\"}[$__rate_interval])))",
-          "legendFormat": "p95 {{path}}"
+          "expr": "histogram_quantile(0.50, sum by (le, span_name) (rate(traces_spanmetrics_latency_bucket{service=\"terraform-parse-service\",span_kind=\"SPAN_KIND_SERVER\",span_name=~\"$route\"}[$__rate_interval])))",
+          "legendFormat": "p50 {{span_name}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le, span_name) (rate(traces_spanmetrics_latency_bucket{service=\"terraform-parse-service\",span_kind=\"SPAN_KIND_SERVER\",span_name=~\"$route\"}[$__rate_interval])))",
+          "legendFormat": "p95 {{span_name}}"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le, span_name) (rate(traces_spanmetrics_latency_bucket{service=\"terraform-parse-service\",span_kind=\"SPAN_KIND_SERVER\",span_name=~\"$route\"}[$__rate_interval])))",
+          "legendFormat": "p99 {{span_name}}"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "s", "decimals": 3 }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
       "id": 6,
-      "title": "Resource operation p95 latency",
+      "title": "Requests by trace outcome",
       "type": "timeseries",
       "gridPos": { "x": 12, "y": 4, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(terraform_resource_operation_duration_seconds_bucket{provider=~\"$provider\", resource=~\"$resource\", operation=~\"$operation\"}[$__rate_interval])))",
-          "legendFormat": "p95 {{operation}}"
+          "expr": "sum by (span_name, status_code) (rate(traces_spanmetrics_calls_total{service=\"terraform-parse-service\",span_kind=\"SPAN_KIND_SERVER\",span_name=~\"$route\"}[$__rate_interval]))",
+          "legendFormat": "{{status_code}} {{span_name}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3 }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2 }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
       "id": 7,
-      "title": "Resource operations by result",
+      "title": "Terraform generation p95",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 11, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (operation, status) (rate(terraform_resource_operations_total{provider=~\"$provider\", resource=~\"$resource\", operation=~\"$operation\"}[$__rate_interval]))",
-          "legendFormat": "{{operation}} / {{status}}"
-        }
-      ],
-      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 2 }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 8,
-      "title": "Terraform generation p95 latency",
-      "type": "timeseries",
-      "gridPos": { "x": 12, "y": 11, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, provider, resource) (rate(terraform_generation_duration_seconds_bucket{provider=~\"$provider\", resource=~\"$resource\"}[$__rate_interval])))",
-          "legendFormat": "p95 {{provider}} / {{resource}}"
+          "expr": "histogram_quantile(0.95, sum by (le, provider, resource) (rate(terraform_generation_duration_seconds_bucket{provider=~\"$provider\",resource=~\"$resource\"}[$__rate_interval])))",
+          "legendFormat": "{{provider}} / {{resource}}"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "s", "decimals": 3 }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
-      "id": 9,
-      "title": "Terraform generation by result",
+      "id": 8,
+      "title": "Terraform generation outcomes",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 7 },
+      "gridPos": { "x": 12, "y": 11, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (provider, resource, status) (rate(terraform_generation_total{provider=~\"$provider\", resource=~\"$resource\"}[$__rate_interval]))",
+          "expr": "sum by (provider, resource, status) (rate(terraform_generation_total{provider=~\"$provider\",resource=~\"$resource\"}[$__rate_interval]))",
           "legendFormat": "{{provider}} / {{resource}} / {{status}}"
         }
       ],
@@ -204,58 +187,26 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
-      "id": 10,
+      "id": 9,
       "title": "Rendered Terraform size p95",
       "type": "timeseries",
-      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 7 },
+      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, provider, resource) (rate(terraform_rendered_bytes_bucket{provider=~\"$provider\", resource=~\"$resource\"}[$__rate_interval])))",
-          "legendFormat": "p95 {{provider}} / {{resource}}"
+          "expr": "histogram_quantile(0.95, sum by (le, provider, resource) (rate(terraform_rendered_bytes_bucket{provider=~\"$provider\",resource=~\"$resource\"}[$__rate_interval])))",
+          "legendFormat": "{{provider}} / {{resource}}"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 0 }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
-      "id": 11,
-      "title": "Storage operation p95 latency",
+      "id": 10,
+      "title": "Template reload outcomes",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 25, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(terraform_storage_operation_duration_seconds_bucket{provider=~\"$provider\"}[$__rate_interval])))",
-          "legendFormat": "p95 {{operation}}"
-        }
-      ],
-      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3 }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 12,
-      "title": "Storage operations by result",
-      "type": "timeseries",
-      "gridPos": { "x": 12, "y": 25, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (operation, status) (rate(terraform_storage_operations_total{provider=~\"$provider\"}[$__rate_interval]))",
-          "legendFormat": "{{operation}} / {{status}}"
-        }
-      ],
-      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 2 }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 13,
-      "title": "Template reloads by result",
-      "type": "timeseries",
-      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 7 },
+      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -268,10 +219,10 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
-      "id": 14,
+      "id": 11,
       "title": "Loaded templates",
       "type": "stat",
-      "gridPos": { "x": 12, "y": 32, "w": 6, "h": 7 },
+      "gridPos": { "x": 0, "y": 25, "w": 8, "h": 6 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -284,16 +235,16 @@
       "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none", "justifyMode": "auto" }
     },
     {
-      "id": 15,
-      "title": "Template reload p95 latency",
+      "id": 12,
+      "title": "Template reload p95",
       "type": "timeseries",
-      "gridPos": { "x": 18, "y": 32, "w": 6, "h": 7 },
+      "gridPos": { "x": 8, "y": 25, "w": 16, "h": 6 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
           "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(terraform_template_reload_duration_seconds_bucket{provider=~\"$provider\"}[$__rate_interval])))",
-          "legendFormat": "p95 {{provider}}"
+          "legendFormat": "{{provider}}"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "s", "decimals": 3 }, "overrides": [] },

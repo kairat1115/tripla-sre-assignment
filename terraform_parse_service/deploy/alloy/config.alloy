@@ -26,7 +26,9 @@ otelcol.exporter.otlp "tempo" {
 }
 
 otelcol.exporter.prometheus "default" {
-  forward_to = [prometheus.remote_write.default.receiver]
+  forward_to           = [prometheus.remote_write.default.receiver]
+  add_metric_suffixes  = true
+  include_scope_labels = false
 }
 
 prometheus.remote_write "default" {
@@ -35,20 +37,15 @@ prometheus.remote_write "default" {
   }
 }
 
-prometheus.scrape "server" {
-  targets = [{
-    __address__ = "server:9091",
-  }]
-  forward_to      = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
-}
-
 discovery.docker "server" {
   host = "unix:///var/run/docker.sock"
 
   filter {
-    name   = "name"
-    values = ["terraform-parse-service-server-1"]
+    name = "label"
+    values = [
+      "com.docker.compose.project=terraform-parse-service",
+      "com.docker.compose.service=server",
+    ]
   }
 }
 
@@ -56,8 +53,8 @@ discovery.relabel "server" {
   targets = discovery.docker.server.targets
 
   rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-    target_label  = "service"
+    replacement  = "terraform-parse-service"
+    target_label = "service_name"
   }
 }
 
@@ -70,23 +67,15 @@ loki.source.docker "server" {
 loki.process "server" {
   forward_to = [loki.write.default.receiver]
 
-  stage.label_drop {
-    values = ["service_name"]
-  }
-
   stage.json {
     expressions = {
-      trace_id     = "trace_id",
-      level        = "level",
-      service_name = "service_name",
+      level = "level",
     }
   }
 
   stage.labels {
     values = {
-      trace_id     = "trace_id",
-      level        = "level",
-      service_name = "service_name",
+      level = "level",
     }
   }
 }

@@ -83,27 +83,98 @@ resource "aws_s3_bucket_acl" "tripla_bucket_acl" {
 	}
 }
 
-func TestIntegration_CreateBucket_MissingProperty(t *testing.T) {
-	srv, _ := newTestServer(t)
-	defer srv.Close()
-
-	body := strings.NewReader(`{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`)
-	resp, err := http.Post(srv.URL+"/api/aws/v1/s3/buckets", "application/json", body)
-	if err != nil {
-		t.Fatalf("request: %v", err)
+func TestIntegration_BucketRequestValidation(t *testing.T) {
+	valid := `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"tripla-bucket"}}}`
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		wantStatus int
+		wantError  string
+	}{
+		{
+			name:       "invalid JSON",
+			method:     http.MethodPost,
+			path:       "/api/aws/v1/s3/buckets",
+			body:       "{bad",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid JSON",
+		},
+		{
+			name:       "multiple JSON values",
+			method:     http.MethodPost,
+			path:       "/api/aws/v1/s3/buckets",
+			body:       valid + `{}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid JSON",
+		},
+		{
+			name:       "unknown property",
+			method:     http.MethodPost,
+			path:       "/api/aws/v1/s3/buckets",
+			body:       `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"tripla-bucket","unknown":true}}}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid JSON",
+		},
+		{
+			name:       "missing region",
+			method:     http.MethodPost,
+			path:       "/api/aws/v1/s3/buckets",
+			body:       `{"payload":{"properties":{"acl":"private","bucket-name":"tripla-bucket"}}}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantError:  "missing required property: aws-region",
+		},
+		{
+			name:       "missing ACL",
+			method:     http.MethodPost,
+			path:       "/api/aws/v1/s3/buckets",
+			body:       `{"payload":{"properties":{"aws-region":"eu-west-1","bucket-name":"tripla-bucket"}}}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantError:  "missing required property: acl",
+		},
+		{
+			name:       "missing bucket name",
+			method:     http.MethodPost,
+			path:       "/api/aws/v1/s3/buckets",
+			body:       `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private"}}}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantError:  "missing required property: bucket-name",
+		},
+		{
+			name:       "invalid bucket name",
+			method:     http.MethodPost,
+			path:       "/api/aws/v1/s3/buckets",
+			body:       `{"payload":{"properties":{"aws-region":"eu-west-1","acl":"private","bucket-name":"INVALID"}}}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantError:  "invalid bucket-name: must contain only lowercase letters, digits, hyphens, and dots, and start/end with a letter or digit",
+		},
+		{
+			name:       "bucket name differs from path",
+			method:     http.MethodPut,
+			path:       "/api/aws/v1/s3/buckets/path-bucket",
+			body:       valid,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantError:  "bucket-name in body must match path parameter",
+		},
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("want 422, got %d", resp.StatusCode)
-	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			srv, _ := newTestServer(t)
+			defer srv.Close()
 
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if result["error"] != "missing required property: bucket-name" {
-		t.Fatalf("unexpected error: %s", result["error"])
+			request, err := http.NewRequest(test.method, srv.URL+test.path, strings.NewReader(test.body))
+			if err != nil {
+				t.Fatalf("create request: %v", err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			assertAPIError(t, response, test.wantStatus, test.wantError)
+		})
 	}
 }
 
@@ -185,11 +256,7 @@ func TestIntegration_GetBucket_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("want 404, got %d", resp.StatusCode)
-	}
+	assertAPIError(t, resp, http.StatusNotFound, "bucket not found")
 }
 
 func TestIntegration_PutBucket_Create(t *testing.T) {
@@ -276,5 +343,32 @@ func TestIntegration_DeleteBucket_Idempotent(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("want 204, got %d", resp.StatusCode)
+	}
+}
+
+func assertAPIError(t *testing.T, response *http.Response, wantStatus int, wantError string) {
+	t.Helper()
+	defer response.Body.Close()
+
+	if response.StatusCode != wantStatus {
+		t.Fatalf("want status %d, got %d", wantStatus, response.StatusCode)
+	}
+	if contentType := response.Header.Get("Content-Type"); contentType != "application/json" {
+		t.Fatalf("want Content-Type application/json, got %q", contentType)
+	}
+
+	var result map[string]json.RawMessage
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("want only the error field, got %v", result)
+	}
+	var message string
+	if err := json.Unmarshal(result["error"], &message); err != nil {
+		t.Fatalf("decode error message: %v", err)
+	}
+	if message != wantError {
+		t.Fatalf("want error %q, got %q", wantError, message)
 	}
 }

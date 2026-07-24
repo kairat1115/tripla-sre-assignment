@@ -53,7 +53,7 @@ alloy:
         stage.json {
           expressions = {
             level        = "level",
-            service_name = "service_name",
+            service_name = "\"service.name\"",
           }
         }
         stage.labels {

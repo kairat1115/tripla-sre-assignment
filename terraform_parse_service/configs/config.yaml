@@ -1,12 +1,9 @@
 listen_addr: ":8080"
+service_name: "terraform-parse-service"
 environment: "${ENVIRONMENT:development}"
 version: "${VERSION:dev}"
 logger:
   level: "info"
-tracing:
-  exporter: "stdout"
-  endpoint: "localhost:4317"
-  sample_ratio: 1.0
 metrics:
   addr: ":9091"
 providers:

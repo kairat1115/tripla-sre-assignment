@@ -3,66 +3,61 @@ package main
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"go.uber.org/zap"
 
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/app"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/config"
 	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/logger"
-	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/tracing"
+	"github.com/kairat1115/tripla-sre-assignment/terraform_parse_service/internal/server"
 )
 
-const tracingShutdownTimeout = 5 * time.Second
-
 func main() {
-	rootCtx := context.Background()
+	os.Exit(run())
+}
 
-	bootstrap, _ := zap.NewProduction()
+func run() int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	bootstrap, err := zap.NewProduction()
+	if err != nil {
+		_ = json.NewEncoder(os.Stderr).Encode(map[string]string{
+			"level": "error",
+			"msg":   "bootstrap logger initialization failed",
+			"error": err.Error(),
+		})
+		return 1
+	}
 	defer func() { _ = bootstrap.Sync() }()
 
 	cfg, err := config.Load()
 	if err != nil {
-		bootstrap.Error("config load failed", zap.Error(err))
-		os.Exit(1)
+		bootstrap.Error("configuration load failed", zap.Error(err))
+		return 1
 	}
 
 	log, err := logger.New(cfg)
 	if err != nil {
-		bootstrap.Error("logger init failed", zap.Error(err))
-		os.Exit(1)
+		bootstrap.Error("service logger initialization failed", zap.Error(err))
+		return 1
 	}
 	defer func() { _ = log.Sync() }()
-	zap.ReplaceGlobals(log)
 
-	traceProvider, err := tracing.New(rootCtx, cfg)
+	service, err := server.New(cfg, log)
 	if err != nil {
-		log.Error("tracer init failed", zap.Error(err))
-		os.Exit(1)
-	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(rootCtx, tracingShutdownTimeout)
-		defer cancel()
-		if err := traceProvider.Shutdown(shutdownCtx); err != nil {
-			log.Warn("tracer shutdown failed", zap.Error(err))
-		}
-	}()
-
-	application, err := app.New(cfg, log)
-	if err != nil {
-		log.Error("app init failed", zap.Error(err))
-		os.Exit(1)
+		log.Error("service initialization failed", zap.Error(err))
+		return 1
 	}
 
-	ctx, stop := signal.NotifyContext(rootCtx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	if err := application.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	log.Info("service starting", zap.String("server.address", cfg.ListenAddr))
+	if err := service.Run(ctx); err != nil {
 		log.Error("server exited", zap.Error(err))
-		os.Exit(1)
+		return 1
 	}
+	log.Info("service stopped")
+	return 0
 }

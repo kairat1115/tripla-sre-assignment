@@ -4,8 +4,20 @@ app:
     create: true
   automountServiceAccountToken: true
   env:
-    - name: APP_ENV
-      value: "staging"
+    - name: OTEL_SERVICE_NAME
+      value: "terraform-parse-service"
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      value: 'deployment.environment.name=staging,service.version={{ .Values.image.tag }}'
+    - name: OTEL_TRACES_EXPORTER
+      value: "otlp"
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://alloy.monitoring.svc.cluster.local:4317"
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: "grpc"
+    - name: OTEL_TRACES_SAMPLER
+      value: "parentbased_traceidratio"
+    - name: OTEL_TRACES_SAMPLER_ARG
+      value: "0.5"
   hpa:
     enabled: false
     # NOTE: because application does not support scaling with replicas, disable them
@@ -23,11 +35,6 @@ app:
           version: '{{ .Values.image.tag }}'
           logger:
             level: "info"
-          tracing:
-            exporter: "otlp_grpc"
-            endpoint: "alloy.monitoring.svc.cluster.local:4317"
-            insecure: true
-            sample_ratio: 0.5
           metrics:
             addr: ":9091"
           providers:

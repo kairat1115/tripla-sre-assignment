@@ -34,6 +34,28 @@ Verify:
 kind version && kubectl version --client && helm version && istioctl version --remote=false && make --version
 ```
 
+## Service-local stack
+
+To run only the service and its local Grafana observability stack:
+
+```bash
+cd terraform_parse_service/deploy
+GIT_SHA="$(git rev-parse --short HEAD)" docker compose up --build -d
+```
+
+The API is available at `http://localhost:8080`, Grafana at
+`http://localhost:3000`, Prometheus at `http://localhost:9090`, and Alloy at
+`http://localhost:12345`. Generated Terraform is bind-mounted to
+`terraform_parse_service/output`.
+
+```bash
+docker compose logs -f server
+docker compose down
+```
+
+See [`terraform_parse_service/README.md`](terraform_parse_service/README.md) for
+the request example, telemetry flow, container-only run, and reset commands.
+
 ## Quick start (automated)
 
 All commands run from the repo root.
@@ -93,7 +115,9 @@ That same tag is passed to Helm as `app.image.tag`. The production config sets:
 version: '{{ .Values.image.tag }}'
 ```
 
-So service logs and OpenTelemetry resource attributes carry the same Git SHA as the deployed image tag.
+The service uses that value in its JSON logs. Helm also adds the image tag to
+`OTEL_RESOURCE_ATTRIBUTES`, so traces carry the same Git SHA as the deployed
+image.
 
 ## Step-by-step guide
 
@@ -416,28 +440,25 @@ kubectl port-forward svc/grafana 3000:80 -n monitoring
 ```
 
 **Metrics (Prometheus datasource):**
-- `http_requests_total` - HTTP request rate
-- `http_request_duration_seconds_bucket` - Request latency histogram
-- `terraform_resource_operations_total` - Resource operation rate
-- `terraform_resource_operation_duration_seconds_bucket` - Resource operation latency
+- `traces_spanmetrics_calls_total` - HTTP request rate and trace outcomes
+- `traces_spanmetrics_latency_bucket` - HTTP request latency derived from traces
 - `terraform_generation_duration_seconds_bucket` - Terraform generation latency
 - `terraform_generation_total` - Terraform generation by provider/template/status
 - `terraform_rendered_bytes_bucket` - Rendered Terraform size
-- `terraform_storage_operation_duration_seconds_bucket` - Storage operation latency
-- `terraform_storage_operations_total` - Storage operations
 - `terraform_template_reloads_total` - Template reloads
 - `terraform_templates_loaded` - Loaded templates
 - `terraform_template_reload_duration_seconds_bucket` - Template reload latency
 
 **Traces (Tempo datasource):**
 - Search `service.name = terraform-parse-service`
-- Span tree per request: `http.request` → `service.generate` → storage write
-- 100% sampling (`sample_ratio: 1.0`)
+- One route-aware server span per API request, enriched with Terraform resource attributes
+- Sampling is controlled with standard `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` environment variables
 
 **Logs (Loki datasource):**
 - Label filter: `{namespace="terraform-parse-service"}`
-- Filter by `level`, `trace_id` labels
-- Click `trace_id` value in Loki to jump to correlated trace in Tempo (TracesToLogsV2 derivation)
+- Filter by the low-cardinality `level` and `service_name` labels
+- Request diagnostics stay on traces; logs cover lifecycle, background work, and successful mutation audits
+- Health checks do not emit application logs
 
 ## CI/CD
 

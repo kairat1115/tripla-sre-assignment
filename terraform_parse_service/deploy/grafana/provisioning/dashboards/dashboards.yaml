@@ -4,5 +4,7 @@ providers:
   - name: default
     folder: Terraform Parse Service
     type: file
+    disableDeletion: true
+    editable: false
     options:
-      path: /etc/grafana/provisioning/dashboards
+      path: /var/lib/grafana/dashboards
